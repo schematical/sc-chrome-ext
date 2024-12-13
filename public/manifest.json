@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Reading time",
+  "name": "Schematical",
   "version": "1.0",
   "description": "Add the reading time to Chrome Extension documentation articles",
   "permissions": [
@@ -9,6 +9,10 @@
     "storage",
     "tabs"
   ],
+  "action": {
+    "default_popup": "menu.html",
+    "default_icon": "images/icon.png"
+  },
   "background": {
     "service_worker": "background.js"
   },

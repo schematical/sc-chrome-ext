@@ -17,10 +17,9 @@ class Main {
             this.handleData();*/
         });
     }
-    replaceKeyWords(){
-        const searchStrings = [
-
-        ];
+    async replaceKeyWords(){
+        const searchStrings = (await  chrome.storage.local.get(["replace_text"])).replace_text.split("\n");
+console.log("searchStrings", searchStrings);
    /*     $("*").contents().filter(function () {
             return this.nodeType === 3; // NodeType 3 = Text node
         }).each(function () {
@@ -40,7 +39,7 @@ class Main {
             if(!this.nodeValue){
                 return;
             }
-            searchStrings.forEach( (searchString) => {
+            searchStrings.forEach( (searchString: string) => {
                 if(this.nodeValue?.indexOf(searchString) === -1){
                     return;
                 }
