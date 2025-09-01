@@ -3,7 +3,17 @@
     "strict": true,
     "module": "commonjs",
     "target": "es6",
+    "lib": ["dom", "dom.iterable", "es6"],
+    "allowJs": true,
+    "skipLibCheck": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "jsx": "react-jsx",
     "sourceMap": true,
     "rootDir": "src",
     "outDir": "dist",
@@ -15,6 +25,8 @@
   "exclude": [
     "_sample/**/*",
     "node_modules/**/*",
-    "dist/**/*"
+    "dist/**/*",
+    "webpack.config.js",
+    "public/**/*"
   ]
 }

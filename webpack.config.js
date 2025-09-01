@@ -11,7 +11,7 @@ const entryPoints = {
     ],
     menu:  path.resolve(__dirname, 'src', 'menu.ts'),
     background: path.resolve(__dirname, 'src', 'background.ts'),
-    'vehicle-gallery': path.resolve(__dirname, 'src', 'vehicle-gallery.ts')
+    'vehicle-gallery': path.resolve(__dirname, 'src', 'vehicle-gallery-react.tsx')
 };
 
 module.exports = {
@@ -21,7 +21,7 @@ module.exports = {
         filename: '[name].js',
     },
     resolve: {
-        extensions: ['.ts', '.js'],
+        extensions: ['.tsx', '.ts', '.jsx', '.js'],
     },
     module: {
         rules: [
