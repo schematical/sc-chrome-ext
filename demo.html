@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Data Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .vehicle-info {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .image-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+        }
+        .image-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }
+        .image-caption {
+            padding: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        .specs-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .specs-table th, .specs-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .specs-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .load-btn {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .load-btn:hover {
+            background-color: #3367d6;
+        }
+        .no-data {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-style: italic;
+        }
+        .error {
+            color: #d93025;
+            background-color: #fce8e6;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 Vehicle Data Demo</h1>
+        <p>This demo shows how to retrieve and display vehicle data stored by the "Set Vehicle" context menu.</p>
+        
+        <button class="load-btn" onclick="loadVehicleData()">Load Vehicle Data</button>
+        
+        <div id="content"></div>
+    </div>
+
+    <script>
+        async function loadVehicleData() {
+            const contentDiv = document.getElementById('content');
+            
+            try {
+                // Get vehicle data from chrome storage
+                const result = await chrome.storage.local.get(['vehicleData']);
+                const vehicleData = result.vehicleData;
+                
+                if (!vehicleData) {
+                    contentDiv.innerHTML = `
+                        <div class="no-data">
+                            <h3>No Vehicle Data Found</h3>
+                            <p>Please use the "Set Vehicle" context menu on a Custom Wheel Offset gallery page first.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const { images, info, extractedAt } = vehicleData;
+                const extractedDate = new Date(extractedAt).toLocaleString();
+                
+                contentDiv.innerHTML = `
+                    <div class="vehicle-info">
+                        <h2>${info.title || 'Unknown Vehicle'}</h2>
+                        <p><strong>Year/Make/Model:</strong> ${info.yearMakeModel || 'Not specified'}</p>
+                        <p><strong>Owner:</strong> ${info.owner || 'Not specified'}</p>
+                        <p><strong>Source URL:</strong> <a href="${info.url}" target="_blank">${info.url}</a></p>
+                        <p><strong>Extracted:</strong> ${extractedDate}</p>
+                        <p><strong>Images Found:</strong> ${images.length}</p>
+                    </div>
+                    
+                    <h3>📊 Vehicle Specifications</h3>
+                    <table class="specs-table">
+                        <tr>
+                            <th>Component</th>
+                            <th>Front</th>
+                            <th>Rear</th>
+                        </tr>
+                        <tr>
+                            <td><strong>Wheels</strong></td>
+                            <td>${info.wheels?.frontSize || 'N/A'}</td>
+                            <td>${info.wheels?.rearSize || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Offset</strong></td>
+                            <td>${info.wheels?.frontOffset || 'N/A'}</td>
+                            <td>${info.wheels?.rearOffset || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Tires</strong></td>
+                            <td>${info.tires?.frontSize || 'N/A'}</td>
+                            <td>${info.tires?.rearSize || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Suspension</strong></td>
+                            <td colspan="2">${info.suspension?.type || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Wheel Brand</strong></td>
+                            <td colspan="2">${info.wheels?.brand || 'N/A'}</td>
+                        </tr>
+                    </table>
+                    
+                    <h3>📸 Vehicle Images</h3>
+                    <div class="images-grid">
+                        ${images.map((imageUrl, index) => `
+                            <div class="image-item">
+                                <img src="${imageUrl}" alt="Vehicle Image ${index + 1}" loading="lazy">
+                                <div class="image-caption">Image ${index + 1}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+            } catch (error) {
+                contentDiv.innerHTML = `
+                    <div class="error">
+                        <h3>Error Loading Vehicle Data</h3>
+                        <p>${error.message}</p>
+                        <p>Make sure this page is opened as a Chrome extension popup or has the necessary permissions.</p>
+                    </div>
+                `;
+                console.error('Error loading vehicle data:', error);
+            }
+        }
+        
+        // Auto-load data when page opens
+        document.addEventListener('DOMContentLoaded', loadVehicleData);
+    </script>
+</body>
+</html>

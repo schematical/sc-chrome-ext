@@ -7,7 +7,9 @@
     "activeTab",
     "scripting",
     "storage",
-    "tabs"
+    "tabs",
+    "contextMenus",
+    "notifications"
   ],
   "action": {
     "default_popup": "menu.html",
@@ -22,7 +24,8 @@
         "main.js"
       ],
       "matches": [
-        "https://*.console.aws.amazon.com/*"
+        "https://*.console.aws.amazon.com/*",
+        "https://*.customwheeloffset.com/*"
       ],
       "run_at": "document_end"
     }
