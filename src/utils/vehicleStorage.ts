@@ -118,6 +118,40 @@ export class VehicleStorage {
     }
 
     /**
+     * Add image to existing vehicle data
+     */
+    static async addImageToVehicle(imageUrl: string): Promise<boolean> {
+        try {
+            const existingData = await this.getVehicleData();
+            
+            if (!existingData) {
+                console.error('No vehicle data exists. Please set a vehicle first.');
+                return false;
+            }
+
+            // Check if image already exists
+            if (existingData.images.includes(imageUrl)) {
+                console.log('Image already exists in vehicle data');
+                return true;
+            }
+
+            // Add the new image
+            existingData.images.push(imageUrl);
+            
+            // Update the storage
+            await chrome.storage.local.set({
+                [this.STORAGE_KEY]: existingData
+            });
+
+            console.log('Image added to vehicle data successfully:', imageUrl);
+            return true;
+        } catch (error) {
+            console.error('Error adding image to vehicle data:', error);
+            return false;
+        }
+    }
+
+    /**
      * Listen for storage changes
      */
     static onStorageChanged(callback: (changes: { [key: string]: chrome.storage.StorageChange }) => void): void {

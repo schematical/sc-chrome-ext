@@ -25,7 +25,7 @@
       ],
       "matches": [
         "https://*.console.aws.amazon.com/*",
-        "https://*.customwheeloffset.com/*"
+        "https://www.customwheeloffset.com/*"
       ],
       "run_at": "document_end"
     }

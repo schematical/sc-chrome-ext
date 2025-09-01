@@ -6,7 +6,13 @@ chrome.runtime.onInstalled.addListener(() => {
     id: "setVehicle",
     title: "Set Vehicle",
     contexts: ["page", "image"],
-    documentUrlPatterns: ["*://*.customwheeloffset.com/*"]
+    documentUrlPatterns: ["https://www.customwheeloffset.com/wheel-offset-gallery/*"]
+  });
+  
+  chrome.contextMenus.create({
+    id: "addToVehicle",
+    title: "Add to vehicle",
+    contexts: ["image"]
   });
 });
 
@@ -20,6 +26,41 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       });
     } catch (error) {
       console.error("Error sending message to content script:", error);
+    }
+  } else if (info.menuItemId === "addToVehicle" && info.srcUrl) {
+    // Add image directly to vehicle data
+    try {
+      const success = await VehicleStorage.addImageToVehicle(info.srcUrl);
+      
+      if (success) {
+        console.log("Image added to vehicle successfully:", info.srcUrl);
+        
+        // Show success notification
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'images/icon.png',
+          title: 'Image Added to Vehicle',
+          message: `Added image to vehicle successfully`
+        });
+      } else {
+        // Show error notification
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'images/icon.png',
+          title: 'Error Adding Image',
+          message: `No vehicle data exists. Please set a vehicle first.`
+        });
+      }
+    } catch (error) {
+      console.error("Error adding image to vehicle:", error);
+      
+      // Show error notification
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'images/icon.png',
+        title: 'Error Adding Image',
+        message: `Failed to add image to vehicle`
+      });
     }
   }
 });
