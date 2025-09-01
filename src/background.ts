@@ -35,12 +35,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       if (success) {
         console.log("Image added to vehicle successfully:", info.srcUrl);
         
+        // Open vehicle gallery in new tab with the newly added image highlighted
+        const galleryUrl = chrome.runtime.getURL('vehicle-gallery.html') + `?newImage=${encodeURIComponent(info.srcUrl)}`;
+        chrome.tabs.create({ url: galleryUrl });
+        
         // Show success notification
         chrome.notifications.create({
           type: 'basic',
           iconUrl: 'images/icon.png',
           title: 'Image Added to Vehicle',
-          message: `Added image to vehicle successfully`
+          message: `Added image to vehicle successfully. Gallery opened in new tab.`
         });
       } else {
         // Show error notification
