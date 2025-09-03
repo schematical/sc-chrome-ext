@@ -182,10 +182,15 @@ export class CompositingService {
             // Generate product description using enhanced metadata
             let productDescription = "This is an automotive product";
             
-            // Extract product metadata from URL
-            const productMetadata = MetadataExtractor.extractProductMetadata(productUrl, document);
-            if (productMetadata.description) {
-                productDescription = productMetadata.description;
+            // If we're on a product page, use the page's product metadata
+            if (pageMetadata.productMetadata && pageMetadata.productMetadata.description) {
+                productDescription = pageMetadata.productMetadata.description;
+            } else {
+                // Fallback: Extract product metadata from URL (for non-product pages)
+                const productMetadata = MetadataExtractor.extractProductMetadata(productUrl, document);
+                if (productMetadata.description) {
+                    productDescription = productMetadata.description;
+                }
             }
             
             // Fallback to stored vehicle data if page metadata is incomplete
