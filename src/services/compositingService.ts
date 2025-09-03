@@ -3,10 +3,10 @@
 export interface CompositeImageRequest {
     sceneUrl: string;
     productUrl: string;
-    dropPosition: Array<{
+    placementGeometry: Array<Array<{
         xPercent: number;
         yPercent: number;
-    }>;
+    }>>;
     sceneDescription: string;
     productDescription: string;
     contextImages?: Array<{
@@ -64,22 +64,29 @@ export class CompositingService {
             errors.push('Valid product URL is required');
         }
 
-        if (!request.dropPosition) {
-            errors.push('Drop position is required');
-        } else if (!Array.isArray(request.dropPosition) || request.dropPosition.length === 0) {
-            errors.push('dropPosition must be a non-empty array of coordinates');
+        if (!request.placementGeometry) {
+            errors.push('Placement geometry is required');
+        } else if (!Array.isArray(request.placementGeometry) || request.placementGeometry.length === 0) {
+            errors.push('placementGeometry must be a non-empty array of polygons');
         } else {
-            // Validate each point in the array
-            request.dropPosition.forEach((point, index) => {
-                if (typeof point.xPercent !== 'number' || 
-                    point.xPercent < 0 || 
-                    point.xPercent > 100) {
-                    errors.push(`Point ${index + 1}: xPercent must be a number between 0 and 100`);
-                }
-                if (typeof point.yPercent !== 'number' || 
-                    point.yPercent < 0 || 
-                    point.yPercent > 100) {
-                    errors.push(`Point ${index + 1}: yPercent must be a number between 0 and 100`);
+            // Validate each polygon in the array
+            request.placementGeometry.forEach((polygon, polygonIndex) => {
+                if (!Array.isArray(polygon) || polygon.length === 0) {
+                    errors.push(`Polygon ${polygonIndex + 1}: Must have at least 1 point`);
+                } else {
+                    // Validate each point in the polygon
+                    polygon.forEach((point, pointIndex) => {
+                        if (typeof point.xPercent !== 'number' || 
+                            point.xPercent < 0 || 
+                            point.xPercent > 100) {
+                            errors.push(`Polygon ${polygonIndex + 1}, Point ${pointIndex + 1}: xPercent must be a number between 0 and 100`);
+                        }
+                        if (typeof point.yPercent !== 'number' || 
+                            point.yPercent < 0 || 
+                            point.yPercent > 100) {
+                            errors.push(`Polygon ${polygonIndex + 1}, Point ${pointIndex + 1}: yPercent must be a number between 0 and 100`);
+                        }
+                    });
                 }
             });
         }
@@ -105,10 +112,10 @@ export class CompositingService {
                     if (!contextImage.polygons || !Array.isArray(contextImage.polygons)) {
                         errors.push(`Context image ${contextIndex + 1}: Polygons must be an array`);
                     } else {
-                        contextImage.polygons.forEach((polygon, polygonIndex) => {
-                            if (!Array.isArray(polygon) || polygon.length < 3) {
-                                errors.push(`Context image ${contextIndex + 1}, polygon ${polygonIndex + 1}: Must have at least 3 points`);
-                            } else {
+                                                 contextImage.polygons.forEach((polygon, polygonIndex) => {
+                             if (!Array.isArray(polygon) || polygon.length === 0) {
+                                 errors.push(`Context image ${contextIndex + 1}, polygon ${polygonIndex + 1}: Must have at least 1 point`);
+                             } else {
                                 polygon.forEach((point, pointIndex) => {
                                     if (typeof point.xPercent !== 'number' || 
                                         point.xPercent < 0 || 

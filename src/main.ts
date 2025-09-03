@@ -565,9 +565,9 @@ console.log("searchStrings", searchStrings);
                         style="flex: 1; background: #28a745; color: white; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">
                     🚀 Generate Composite
                 </button>
-                <button class="auto-fill-btn" 
-                        style="background: #6c757d; color: white; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                    📝 Auto-fill
+                <button class="clear-points-btn" 
+                        style="background: #dc3545; color: white; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    🗑️ Clear
                 </button>
                 <button class="advanced-toggle-btn" 
                         style="background: #17a2b8; color: white; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-size: 12px;">
@@ -611,14 +611,17 @@ console.log("searchStrings", searchStrings);
                         </div>
                         <div class="position-info" style="font-size: 12px; color: #666;">
                             <div class="position-coordinates" style="margin-bottom: 8px; font-weight: bold;"></div>
-                            <div class="position-controls" style="display: none;">
-                                <button class="clear-points-btn" style="background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 8px;">
-                                    🗑️ Clear Points
-                                </button>
-                                <span class="polygon-instructions" style="font-style: italic; display: none;">
-                                    Click first point again to close polygon
-                                </span>
-                            </div>
+                                                    <div class="position-controls" style="display: none;">
+                            <button class="clear-points-btn" style="background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 8px;">
+                                🗑️ Clear Points
+                            </button>
+                            <button class="next-polygon-btn" style="background: #17a2b8; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 8px; display: none;">
+                                🔷 Next Polygon
+                            </button>
+                            <span class="polygon-instructions" style="font-style: italic; display: none;">
+                                Click first point again to close polygon
+                            </span>
+                        </div>
                         </div>
                     </div>
                 </div>
@@ -681,6 +684,14 @@ console.log("searchStrings", searchStrings);
                     <div style="font-weight: bold; margin-bottom: 8px; color: #28a745; font-size: 12px;">🛞 Product Image</div>
                     <img class="product-preview-img" style="max-width: 100%; max-height: 200px; border: 2px solid #28a745; border-radius: 4px; object-fit: contain;" />
                     <div class="product-preview-url" style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all;"></div>
+                </div>
+
+                <!-- Position Debug Info -->
+                <div class="position-debug-info" style="margin-top: 16px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+                    <div style="font-weight: bold; margin-bottom: 8px; color: #333; font-size: 12px;">📍 Position Debug Information</div>
+                    <div class="position-summary" style="font-size: 11px; color: #666;">
+                        No positions set yet
+                    </div>
                 </div>
             </div>
 
@@ -1195,9 +1206,110 @@ console.log("searchStrings", searchStrings);
         }
     }
 
+    clearPositionPoints(container: HTMLElement) {
+        const vehicleCanvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
+        if (vehicleCanvas) {
+            // Clear the canvas dataset
+            vehicleCanvas.dataset.points = JSON.stringify([]);
+            vehicleCanvas.dataset.currentPolygon = JSON.stringify([]);
+            vehicleCanvas.dataset.completedPolygons = JSON.stringify([]);
+            
+            // Redraw the canvas to clear visual elements
+            const ctx = vehicleCanvas.getContext('2d');
+            if (ctx) {
+                ctx.clearRect(0, 0, vehicleCanvas.width, vehicleCanvas.height);
+            }
+            
+            // Update the position display
+            const positionCoordinates = container.querySelector('.position-coordinates') as HTMLDivElement;
+            const positionControls = container.querySelector('.position-controls') as HTMLDivElement;
+            
+            if (positionCoordinates) {
+                positionCoordinates.textContent = '';
+            }
+            if (positionControls) {
+                positionControls.style.display = 'none';
+            }
+            
+            // Update debug info
+            this.updatePositionDebugInfo(container);
+            
+            console.log('Cleared all position points and polygons');
+        }
+    }
+
+    startNextPolygon(container: HTMLElement) {
+        const vehicleCanvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
+        if (vehicleCanvas) {
+            // Get current points and completed polygons
+            const currentPoints = JSON.parse(vehicleCanvas.dataset.points || '[]');
+            const completedPolygons = JSON.parse(vehicleCanvas.dataset.completedPolygons || '[]');
+            
+            if (currentPoints.length >= 3) {
+                // Add current polygon to completed polygons
+                completedPolygons.push([...currentPoints]);
+                vehicleCanvas.dataset.completedPolygons = JSON.stringify(completedPolygons);
+                
+                // Clear current points to start new polygon
+                vehicleCanvas.dataset.points = JSON.stringify([]);
+                
+                // Update display
+                this.updateVehiclePositionDisplay(container, vehicleCanvas);
+                this.updatePositionDebugInfo(container);
+                
+                console.log('Started new polygon. Total completed polygons:', completedPolygons.length);
+            }
+        }
+    }
+
+    updatePositionDebugInfo(container: HTMLElement) {
+        const vehicleCanvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
+        const positionSummary = container.querySelector('.position-summary') as HTMLDivElement;
+        
+        if (!vehicleCanvas || !positionSummary) return;
+        
+        const currentPoints = JSON.parse(vehicleCanvas.dataset.points || '[]');
+        const completedPolygons = JSON.parse(vehicleCanvas.dataset.completedPolygons || '[]');
+        const mode = (container.querySelector('.position-mode-radio:checked') as HTMLInputElement)?.value || 'point';
+        
+        let summary = '';
+        
+        if (mode === 'point') {
+            if (currentPoints.length === 0) {
+                summary = 'No points set';
+            } else if (currentPoints.length === 1) {
+                const p = currentPoints[0];
+                summary = `Point 1: (${Math.round(p.x)}, ${Math.round(p.y)})`;
+            } else {
+                const p1 = currentPoints[0];
+                const p2 = currentPoints[1];
+                summary = `Point 1: (${Math.round(p1.x)}, ${Math.round(p1.y)}) • Point 2: (${Math.round(p2.x)}, ${Math.round(p2.y)})`;
+            }
+        } else {
+            if (completedPolygons.length === 0 && currentPoints.length === 0) {
+                summary = 'No polygons set';
+            } else {
+                summary = `Completed polygons: ${completedPolygons.length}`;
+                if (currentPoints.length > 0) {
+                    summary += ` • Current polygon: ${currentPoints.length} points`;
+                }
+                
+                // Show rough point counts for each polygon
+                if (completedPolygons.length > 0) {
+                    const polygonInfo = completedPolygons.map((polygon: any[], index: number) => 
+                        `P${index + 1}: ${polygon.length}pts`
+                    ).join(', ');
+                    summary += ` • [${polygonInfo}]`;
+                }
+            }
+        }
+        
+        positionSummary.textContent = summary;
+    }
+
     setupInterfaceEventHandlers(container: HTMLElement) {
         const generateBtn = container.querySelector('.generate-composite-btn') as HTMLButtonElement;
-        const autoFillBtn = container.querySelector('.auto-fill-btn') as HTMLButtonElement;
+        const clearPointsBtn = container.querySelector('.clear-points-btn') as HTMLButtonElement;
         const advancedToggleBtn = container.querySelector('.advanced-toggle-btn') as HTMLButtonElement;
         const debugToggleBtn = container.querySelector('.debug-toggle-btn') as HTMLButtonElement;
         const vehicleSelect = container.querySelector('.vehicle-image-select') as HTMLSelectElement;
@@ -1208,10 +1320,18 @@ console.log("searchStrings", searchStrings);
             this.handleInterfaceCompositeGeneration(container);
         });
 
-        // Auto-fill handler
-        autoFillBtn.addEventListener('click', () => {
-            this.generateDescriptionsForInterface(container);
+        // Clear points handler
+        clearPointsBtn.addEventListener('click', () => {
+            this.clearPositionPoints(container);
         });
+
+        // Next polygon handler
+        const nextPolygonBtn = container.querySelector('.next-polygon-btn') as HTMLButtonElement;
+        if (nextPolygonBtn) {
+            nextPolygonBtn.addEventListener('click', () => {
+                this.startNextPolygon(container);
+            });
+        }
 
         // Advanced toggle handler
         advancedToggleBtn.addEventListener('click', () => {
@@ -1243,13 +1363,7 @@ console.log("searchStrings", searchStrings);
             });
         });
 
-        // Clear points handler
-        const clearPointsBtn = container.querySelector('.clear-points-btn') as HTMLButtonElement;
-        if (clearPointsBtn) {
-            clearPointsBtn.addEventListener('click', () => {
-                this.clearPositionPoints(container);
-            });
-        }
+
 
         // Update previews and setup positioning after initial population
         setTimeout(() => {
@@ -1288,16 +1402,51 @@ console.log("searchStrings", searchStrings);
 
             // Get position data from vehicle positioning canvas
             const vehicleCanvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
-            const points = JSON.parse(vehicleCanvas?.dataset.points || '[]');
-            if (points.length === 0) {
-                throw new Error('Please click on the vehicle image to set product position');
+            const currentPoints = JSON.parse(vehicleCanvas?.dataset.points || '[]');
+            const completedPolygons = JSON.parse(vehicleCanvas?.dataset.completedPolygons || '[]');
+            const mode = (container.querySelector('.position-mode-radio:checked') as HTMLInputElement)?.value || 'point';
+            
+            let positionData: Array<Array<{xPercent: number, yPercent: number}>> = [];
+            
+            if (mode === 'point') {
+                // For point mode, create separate polygons for each point
+                if (currentPoints.length === 0) {
+                    throw new Error('Please click on the vehicle image to set product position');
+                }
+                positionData = currentPoints.map((point: any) => [{
+                    xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
+                    yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
+                }]); // Each point becomes its own polygon
+            } else {
+                // For polygon mode, combine completed polygons with current points if they form a complete polygon
+                let allPolygons: Array<Array<{xPercent: number, yPercent: number}>> = [];
+                
+                // Add completed polygons
+                completedPolygons.forEach((polygon: any[]) => {
+                    if (polygon.length >= 3) {
+                        const percentagePolygon = polygon.map((point: any) => ({
+                            xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
+                            yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
+                        }));
+                        allPolygons.push(percentagePolygon);
+                    }
+                });
+                
+                // Add current points if they form a complete polygon
+                if (currentPoints.length >= 3) {
+                    const currentPolygon = currentPoints.map((point: any) => ({
+                        xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
+                        yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
+                    }));
+                    allPolygons.push(currentPolygon);
+                }
+                
+                if (allPolygons.length === 0) {
+                    throw new Error('Please create at least one complete polygon on the vehicle image');
+                }
+                
+                positionData = allPolygons; // Keep as array of polygons
             }
-
-            // Convert canvas coordinates to percentages
-            const positionData = points.map((point: any) => ({
-                xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
-                yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
-            }));
 
             const vehicleDescription = vehicleTextarea.value.trim();
             const productDescription = productTextarea.value.trim();
@@ -1390,7 +1539,7 @@ console.log("searchStrings", searchStrings);
             const request = {
                 sceneUrl: vehicleImageUrl,
                 productUrl: productImageUrl,
-                dropPosition: positionData, // Now sends array of points
+                placementGeometry: positionData, // Now sends array of polygons
                 sceneDescription: vehicleDescription,
                 productDescription: productDescription,
                 ...(contextImages.length > 0 && { contextImages })
@@ -1705,10 +1854,10 @@ console.log("searchStrings", searchStrings);
             const request = {
                 sceneUrl,
                 productUrl,
-                dropPosition: [{
+                placementGeometry: [[{
                     xPercent,
                     yPercent
-                }],
+                }]],
                 sceneDescription,
                 productDescription
             };
@@ -1796,6 +1945,17 @@ console.log("searchStrings", searchStrings);
                         font-weight: bold;
                         flex: 1;
                     ">Set Vehicle</button>
+                    <button class="view-3d-button" style="
+                        background: #9c27b0;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: bold;
+                        flex: 1;
+                    ">Create 3D Model</button>
                     ${galleryImages.length > 1 ? `
                         <span style="font-size: 11px; color: #666;">${galleryImages.length} images</span>
                     ` : ''}
@@ -1836,6 +1996,27 @@ console.log("searchStrings", searchStrings);
                 setButton.disabled = false;
             }
         });
+
+        // Handle View in 3D button click
+        const view3dBtn = container.querySelector('.view-3d-button') as HTMLButtonElement;
+        if (view3dBtn) {
+            view3dBtn.addEventListener('click', async () => {
+                // Check if we have a meshy model ID
+                const { VehicleStorage } = await import('./utils/vehicleStorage');
+                const vehicleData = await VehicleStorage.getVehicleData();
+                
+                if (vehicleData?.meshyModelId) {
+                    // If we have a model ID, show the 3D viewer
+                    this.view3DModel(vehicleData.meshyModelId);
+                } else {
+                    // If no model ID, show the creation modal
+                    this.show3DModal(galleryImages, vehicleInfo);
+                }
+            });
+
+            // Update button text based on whether we have a model ID
+            this.update3DButtonText(view3dBtn);
+        }
     }
 
     getCurrentVehicleImageUrl(): string {
@@ -1945,6 +2126,331 @@ console.log("searchStrings", searchStrings);
 
         // Fallback to page title
         return document.title.split('|')[0]?.trim() || '';
+    }
+
+    show3DModal(galleryImages: Array<{thumbUrl: string, fullUrl: string, isMain: boolean}>, vehicleInfo: string) {
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.className = 'meshy-modal-overlay';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        `;
+
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.className = 'meshy-modal-content';
+        modalContent.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        `;
+
+        // Create close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '×';
+        closeBtn.style.cssText = `
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        `;
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+
+        // Create modal header
+        const header = document.createElement('div');
+        header.innerHTML = `
+            <h3 style="margin: 0 0 16px 0; color: #333;">Generate 3D Model</h3>
+            <p style="margin: 0 0 16px 0; color: #666; font-size: 14px;">
+                Select images to use for 3D model generation. All images are selected by default.
+            </p>
+        `;
+
+        // Create image selection grid
+        const imageGrid = document.createElement('div');
+        imageGrid.style.cssText = `
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        `;
+
+        // Add image selection checkboxes
+        galleryImages.forEach((image, index) => {
+            const imageContainer = document.createElement('div');
+            imageContainer.style.cssText = `
+                text-align: center;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 8px;
+                background: white;
+            `;
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = true; // Default to selected
+            checkbox.style.cssText = `
+                margin-bottom: 8px;
+                transform: scale(1.2);
+            `;
+
+            const img = document.createElement('img');
+            img.src = image.fullUrl;
+            img.alt = `Image ${index + 1}`;
+            img.style.cssText = `
+                width: 100%;
+                height: 80px;
+                object-fit: cover;
+                border-radius: 4px;
+                margin-bottom: 4px;
+            `;
+
+            const label = document.createElement('div');
+            label.textContent = `Image ${index + 1}`;
+            label.style.cssText = `
+                font-size: 11px;
+                color: #666;
+                margin-top: 4px;
+            `;
+
+            imageContainer.appendChild(checkbox);
+            imageContainer.appendChild(img);
+            imageContainer.appendChild(label);
+            imageGrid.appendChild(imageContainer);
+        });
+
+        // Create generate button
+        const generateBtn = document.createElement('button');
+        generateBtn.textContent = '🚀 Generate 3D Model';
+        generateBtn.style.cssText = `
+            background: #9c27b0;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            width: 100%;
+        `;
+
+        // Add loading state
+        let isGenerating = false;
+        generateBtn.addEventListener('click', async () => {
+            if (isGenerating) return;
+            
+            isGenerating = true;
+            generateBtn.textContent = '⏳ Generating...';
+            generateBtn.disabled = true;
+            generateBtn.style.background = '#666';
+
+            try {
+                // Get selected image URLs
+                const selectedImages = Array.from(imageGrid.querySelectorAll('input[type="checkbox"]:checked'))
+                    .map((checkbox, index) => galleryImages[index].fullUrl);
+
+                if (selectedImages.length === 0) {
+                    throw new Error('Please select at least one image');
+                }
+
+                // Generate texture prompt from vehicle info
+                const texturePrompt = this.generateTexturePrompt(vehicleInfo);
+
+                // Call Meshy API
+                const { MeshyService } = await import('./services/meshyService');
+                const response = await MeshyService.generate3DModel({
+                    imageUrls: selectedImages,
+                    texturePrompt
+                });
+
+                // Store the model ID
+                const { VehicleStorage } = await import('./utils/vehicleStorage');
+                await VehicleStorage.updateMeshyModelId(response.id);
+
+                // Show success
+                generateBtn.textContent = '✅ 3D Model Generated!';
+                generateBtn.style.background = '#4caf50';
+                
+                // Update the button text on the main interface
+                const mainButton = document.querySelector('.view-3d-button') as HTMLButtonElement;
+                if (mainButton) {
+                    this.update3DButtonText(mainButton);
+                }
+                
+                // Close modal after delay
+                setTimeout(() => {
+                    document.body.removeChild(modal);
+                }, 2000);
+
+            } catch (error) {
+                console.error('3D model generation error:', error);
+                generateBtn.textContent = '❌ Error - Try Again';
+                generateBtn.style.background = '#f44336';
+                
+                // Reset button after delay
+                setTimeout(() => {
+                    isGenerating = false;
+                    generateBtn.textContent = '🚀 Generate 3D Model';
+                    generateBtn.disabled = false;
+                    generateBtn.style.background = '#9c27b0';
+                }, 3000);
+            }
+        });
+
+        // Assemble modal
+        modalContent.appendChild(closeBtn);
+        modalContent.appendChild(header);
+        modalContent.appendChild(imageGrid);
+        modalContent.appendChild(generateBtn);
+        modal.appendChild(modalContent);
+
+        // Add to page
+        document.body.appendChild(modal);
+
+        // Close on overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
+    }
+
+    generateTexturePrompt(vehicleInfo: string): string {
+        // Extract key details for texture prompt
+        const prompt = vehicleInfo || 'vehicle';
+        
+        // Add common texture details
+        return `A detailed 3D model of a ${prompt} with realistic textures, proper lighting, and high-quality materials. The model should capture the vehicle's appearance, including any custom modifications, wheels, and paint finish.`;
+    }
+
+    async update3DButtonText(button: HTMLButtonElement): Promise<void> {
+        try {
+            const { VehicleStorage } = await import('./utils/vehicleStorage');
+            const vehicleData = await VehicleStorage.getVehicleData();
+            
+            if (vehicleData?.meshyModelId) {
+                button.textContent = '👁️ View in 3D';
+                button.style.background = '#4caf50';
+            } else {
+                button.textContent = '🚀 Create 3D Model';
+                button.style.background = '#9c27b0';
+            }
+        } catch (error) {
+            console.error('Error updating 3D button text:', error);
+            button.textContent = '🚀 Create 3D Model';
+            button.style.background = '#9c27b0';
+        }
+    }
+
+
+
+    async view3DModel(taskId: string) {
+        try {
+            // Create modal for 3D viewer
+            const modal = document.createElement('div');
+            modal.className = 'meshy-3d-viewer-modal-overlay';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.9);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 10001;
+            `;
+
+            // Create modal content
+            const modalContent = document.createElement('div');
+            modalContent.className = 'meshy-3d-viewer-modal-content';
+            modalContent.style.cssText = `
+                background: white;
+                border-radius: 8px;
+                padding: 24px;
+                max-width: 90vw;
+                max-height: 90vh;
+                position: relative;
+            `;
+
+            // Create close button
+            const closeBtn = document.createElement('button');
+            closeBtn.innerHTML = '×';
+            closeBtn.style.cssText = `
+                position: absolute;
+                top: 12px;
+                right: 16px;
+                background: none;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                color: #666;
+                z-index: 10;
+            `;
+            closeBtn.addEventListener('click', () => {
+                document.body.removeChild(modal);
+            });
+
+            // Create header
+            const header = document.createElement('div');
+            header.innerHTML = `
+                <h3 style="margin: 0 0 16px 0; color: #333;">3D Model Viewer</h3>
+            `;
+
+            // Create viewer container
+            const viewerContainer = document.createElement('div');
+            viewerContainer.style.cssText = `
+                width: 800px;
+                height: 600px;
+                position: relative;
+            `;
+
+            // Assemble modal
+            modalContent.appendChild(closeBtn);
+            modalContent.appendChild(header);
+            modalContent.appendChild(viewerContainer);
+            modal.appendChild(modalContent);
+
+            // Add to page
+            document.body.appendChild(modal);
+
+            // Close on overlay click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
+
+            // Create 3D viewer
+            const { MeshyViewerService } = await import('./services/meshyViewerService');
+            const { Meshy3DViewer } = await import('./components/meshy3DViewer');
+            
+            const modelUrl = MeshyViewerService.getGlbDownloadUrl(taskId);
+            const viewer = new Meshy3DViewer(viewerContainer, modelUrl);
+            await viewer.createViewer();
+
+        } catch (error) {
+            console.error('Error viewing 3D model:', error);
+        }
     }
 
     async setVehicleForCompositing(galleryImages: Array<{thumbUrl: string, fullUrl: string, isMain: boolean}>, vehicleInfo: string, selectedImageUrl?: string) {
@@ -2128,8 +2634,15 @@ console.log("searchStrings", searchStrings);
         const mode = (container.querySelector('.position-mode-radio:checked') as HTMLInputElement)?.value || 'point';
 
         if (mode === 'point') {
-            // Point mode: replace existing point
-            canvas.dataset.points = JSON.stringify([{ x, y }]);
+            // Point mode: add point (support up to 2 points)
+            if (points.length >= 2) {
+                // Replace the last point
+                points[points.length - 1] = { x, y };
+            } else {
+                // Add new point
+                points.push({ x, y });
+            }
+            canvas.dataset.points = JSON.stringify(points);
         } else {
             // Polygon mode: add point or close polygon
             if (points.length > 2) {
@@ -2164,7 +2677,35 @@ console.log("searchStrings", searchStrings);
         // Clear canvas and draw points/lines only (no background image needed since it's overlaid)
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw points and lines
+        // Draw completed polygons first (in blue)
+        const completedPolygons = JSON.parse(canvas.dataset.completedPolygons || '[]');
+        if (completedPolygons.length > 0) {
+            ctx.strokeStyle = '#0066cc';
+            ctx.fillStyle = '#0066cc';
+            ctx.lineWidth = 2;
+            
+            completedPolygons.forEach((polygon: any[]) => {
+                if (polygon.length >= 3) {
+                    // Draw polygon lines
+                    ctx.beginPath();
+                    ctx.moveTo(polygon[0].x, polygon[0].y);
+                    for (let i = 1; i < polygon.length; i++) {
+                        ctx.lineTo(polygon[i].x, polygon[i].y);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                    
+                    // Draw polygon points
+                    polygon.forEach((point: any) => {
+                        ctx.beginPath();
+                        ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+                        ctx.fill();
+                    });
+                }
+            });
+        }
+
+        // Draw current points and lines
         if (points.length > 0) {
             ctx.strokeStyle = '#ff0000';
             ctx.fillStyle = '#ff0000';
@@ -2181,13 +2722,15 @@ console.log("searchStrings", searchStrings);
                 ctx.fillStyle = '#ff0000';
                 ctx.fill();
 
-                // Draw lines for polygon
+                // Draw lines for polygon mode
                 if (mode === 'polygon' && index > 0) {
                     ctx.beginPath();
                     ctx.moveTo(points[index - 1].x, points[index - 1].y);
                     ctx.lineTo(point.x, point.y);
                     ctx.stroke();
                 }
+                
+
             });
 
             // Draw closing line for completed polygon
@@ -2207,12 +2750,26 @@ console.log("searchStrings", searchStrings);
             }));
 
             if (mode === 'point') {
-                coordinates.textContent = `Point: ${percentagePoints[0].xPercent}%, ${percentagePoints[0].yPercent}%`;
+                if (points.length === 1) {
+                    coordinates.textContent = `Point 1: ${percentagePoints[0].xPercent}%, ${percentagePoints[0].yPercent}%`;
+                } else {
+                    coordinates.textContent = `Point 1: ${percentagePoints[0].xPercent}%, ${percentagePoints[0].yPercent}% • Point 2: ${percentagePoints[1].xPercent}%, ${percentagePoints[1].yPercent}%`;
+                }
             } else {
                 coordinates.textContent = `Polygon: ${points.length} points`;
             }
             
             controls.style.display = 'block';
+            
+            // Show/hide Next Polygon button for polygon mode
+            const nextPolygonBtn = container.querySelector('.next-polygon-btn') as HTMLButtonElement;
+            if (nextPolygonBtn) {
+                if (mode === 'polygon' && points.length >= 3) {
+                    nextPolygonBtn.style.display = 'inline-block';
+                } else {
+                    nextPolygonBtn.style.display = 'none';
+                }
+            }
             
             if (mode === 'polygon' && points.length >= 2 && points.length < 10) {
                 polygonInstructions.style.display = 'inline';
@@ -2222,6 +2779,12 @@ console.log("searchStrings", searchStrings);
         } else {
             coordinates.textContent = '';
             controls.style.display = 'none';
+            
+            // Hide Next Polygon button when no points
+            const nextPolygonBtn = container.querySelector('.next-polygon-btn') as HTMLButtonElement;
+            if (nextPolygonBtn) {
+                nextPolygonBtn.style.display = 'none';
+            }
         }
     }
 
@@ -2229,16 +2792,11 @@ console.log("searchStrings", searchStrings);
         const canvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
         if (canvas) {
             this.clearPositionPoints(container);
+            this.updatePositionDebugInfo(container);
         }
     }
 
-    clearPositionPoints(container: HTMLElement) {
-        const canvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
-        if (canvas) {
-            canvas.dataset.points = JSON.stringify([]);
-            this.updateVehiclePositionDisplay(container, canvas);
-        }
-    }
+
 }
 
 new Main();

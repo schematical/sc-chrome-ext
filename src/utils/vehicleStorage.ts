@@ -32,6 +32,7 @@ export interface VehicleData {
         };
     };
     products?: ProductPosition[];
+    meshyModelId?: string;
     extractedAt: number;
 }
 
@@ -269,6 +270,51 @@ export class VehicleStorage {
             return true;
         } catch (error) {
             console.error('Error clearing product positions:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Update the meshy model ID for the current vehicle
+     */
+    static async updateMeshyModelId(meshyModelId: string): Promise<boolean> {
+        try {
+            const existingData = await this.getVehicleData();
+            
+            if (!existingData) {
+                // If no vehicle data exists, create a basic vehicle entry
+                const basicVehicleData: VehicleData = {
+                    images: [],
+                    info: {
+                        title: 'Vehicle',
+                        url: window.location.href,
+                        wheels: {},
+                        tires: {},
+                        suspension: {}
+                    },
+                    meshyModelId,
+                    extractedAt: Date.now()
+                };
+                
+                await chrome.storage.local.set({
+                    [this.STORAGE_KEY]: basicVehicleData
+                });
+                
+                console.log('Created new vehicle data with meshy model ID:', meshyModelId);
+                return true;
+            }
+
+            existingData.meshyModelId = meshyModelId;
+            
+            // Update the storage
+            await chrome.storage.local.set({
+                [this.STORAGE_KEY]: existingData
+            });
+
+            console.log('Meshy model ID updated successfully:', meshyModelId);
+            return true;
+        } catch (error) {
+            console.error('Error updating meshy model ID:', error);
             return false;
         }
     }
