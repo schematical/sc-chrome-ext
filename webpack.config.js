@@ -14,43 +14,51 @@ const entryPoints = {
     'vehicle-gallery': path.resolve(__dirname, 'src', 'vehicle-gallery-react.tsx')
 };
 
-module.exports = {
-    entry: entryPoints,
-    output: {
-        path: path.join(__dirname, outputPath),
-        filename: '[name].js',
-    },
-    resolve: {
-        extensions: ['.tsx', '.ts', '.jsx', '.js'],
-    },
-    module: {
-        rules: [
-            {
-                test: /\.tsx?$/,
-                loader: 'ts-loader',
-                exclude: /node_modules/,
-            },
-            {
-                test: /\.(sa|sc)ss$/,
-                use: [
-                    MiniCssExtractPlugin.loader,
-                    'css-loader',
-                    'sass-loader'
-                ]
-            },
-            {
-                test: /\.(jpg|jpeg|png|gif|woff|woff2|eot|ttf|svg)$/i,
-                use: 'url-loader?limit=1024'
-            }
-        ],
-    },
-    plugins: [
-        new CopyPlugin({
-            patterns: [{ from: '.', to: '.', context: 'public' }]
-        }),
-        new MiniCssExtractPlugin({
-            filename: '[name].css',
-        }),
-        new Dotenv(),
-    ]
+module.exports = (env, argv) => {
+    const isProduction = argv.mode === 'production';
+    
+    return {
+        entry: entryPoints,
+        output: {
+            path: path.join(__dirname, outputPath),
+            filename: '[name].js',
+        },
+        devtool: isProduction ? false : 'source-map',
+        optimization: {
+            minimize: isProduction,
+        },
+        resolve: {
+            extensions: ['.tsx', '.ts', '.jsx', '.js'],
+        },
+        module: {
+            rules: [
+                {
+                    test: /\.tsx?$/,
+                    loader: 'ts-loader',
+                    exclude: /node_modules/,
+                },
+                {
+                    test: /\.(sa|sc)ss$/,
+                    use: [
+                        MiniCssExtractPlugin.loader,
+                        'css-loader',
+                        'sass-loader'
+                    ]
+                },
+                {
+                    test: /\.(jpg|jpeg|png|gif|woff|woff2|eot|ttf|svg)$/i,
+                    use: 'url-loader?limit=1024'
+                }
+            ],
+        },
+        plugins: [
+            new CopyPlugin({
+                patterns: [{ from: '.', to: '.', context: 'public' }]
+            }),
+            new MiniCssExtractPlugin({
+                filename: '[name].css',
+            }),
+            new Dotenv(),
+        ]
+    };
 };
