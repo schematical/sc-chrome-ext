@@ -537,16 +537,115 @@ console.log("searchStrings", searchStrings);
                 </p>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                <div>
-                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
-                        Vehicle Image:
-                    </label>
-                    <select class="vehicle-image-select" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
-                        <option value="">Choose vehicle image...</option>
-                    </select>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
+                    Vehicle Image:
+                </label>
+                <select class="vehicle-image-select" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                    <option value="">Choose vehicle image...</option>
+                </select>
+            </div>
+
+            <!-- Vehicle Image Preview (Full Width) - Clickable for Positioning -->
+            <div class="vehicle-image-preview" style="margin-bottom: 16px; text-align: center; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; display: none;">
+                <h5 style="margin: 0 0 12px 0; color: #333; font-size: 14px;">🚗 Vehicle Scene</h5>
+                <div class="vehicle-image-container" style="position: relative; display: inline-block;">
+                    <canvas class="vehicle-positioning-canvas" style="border: 2px solid #007bff; border-radius: 4px; cursor: crosshair; display: none;"></canvas>
+                    <img class="vehicle-preview-img" style="width: 100%; max-height: 300px; object-fit: contain; border: 2px solid #007bff; border-radius: 4px;" />
                 </div>
-                <div>
+                <div class="vehicle-preview-url" style="font-size: 12px; color: #666; margin-top: 8px; word-break: break-all;"></div>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
+                <button class="generate-composite-btn" 
+                        style="flex: 1; background: #28a745; color: white; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">
+                    🚀 Generate Composite
+                </button>
+                <button class="auto-fill-btn" 
+                        style="background: #6c757d; color: white; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    📝 Auto-fill
+                </button>
+                <button class="advanced-toggle-btn" 
+                        style="background: #17a2b8; color: white; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    ⚙️ Advanced
+                </button>
+                <button class="debug-toggle-btn" 
+                        style="background: #ffc107; color: #212529; border: none; padding: 12px 16px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    🐛 Debug
+                </button>
+            </div>
+
+            <!-- Advanced Settings Panel -->
+            <div class="advanced-panel" style="display: none; margin-bottom: 16px; padding: 16px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+                <h5 style="margin: 0 0 16px 0; color: #333; font-size: 14px;">⚙️ Advanced Position & Description Settings</h5>
+                
+                <!-- Position Mode Selection -->
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #555;">
+                        Position Mode:
+                    </label>
+                    <div style="display: flex; gap: 12px;">
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                            <input type="radio" name="position-mode" value="point" class="position-mode-radio" checked>
+                            <span>📍 Point (Single Click)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                            <input type="radio" name="position-mode" value="polygon" class="position-mode-radio">
+                            <span>🔷 Polygon (Multiple Points)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Position Controls -->
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #555;">
+                        Product Positioning:
+                    </label>
+                    <div style="background: #ffffff; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px;">
+                        <div style="margin-bottom: 8px; font-size: 12px; color: #666;">
+                            Click directly on the Vehicle Scene image above to set product position
+                        </div>
+                        <div class="position-info" style="font-size: 12px; color: #666;">
+                            <div class="position-coordinates" style="margin-bottom: 8px; font-weight: bold;"></div>
+                            <div class="position-controls" style="display: none;">
+                                <button class="clear-points-btn" style="background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 8px;">
+                                    🗑️ Clear Points
+                                </button>
+                                <span class="polygon-instructions" style="font-style: italic; display: none;">
+                                    Click first point again to close polygon
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Descriptions -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
+                            Vehicle Description:
+                        </label>
+                        <textarea class="vehicle-description" rows="3" 
+                                  style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"
+                                  placeholder="Auto-generated from page data..."></textarea>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
+                            Product Description:
+                        </label>
+                        <textarea class="product-description" rows="3" 
+                                  style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"
+                                  placeholder="Auto-generated from page data..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debug Panel -->
+            <div class="debug-panel" style="display: none; margin-bottom: 16px; padding: 16px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
+                <h5 style="margin: 0 0 16px 0; color: #333; font-size: 14px;">🐛 Debug Information</h5>
+                
+                <!-- Product Image Selector (moved from main UI) -->
+                <div style="margin-bottom: 16px;">
                     <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
                         Product Image:
                     </label>
@@ -554,76 +653,12 @@ console.log("searchStrings", searchStrings);
                         <option value="">Choose product image...</option>
                     </select>
                 </div>
-            </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                <div>
-                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
-                        Product Position:
-                    </label>
-                    <div style="display: flex; gap: 8px;">
-                        <div style="flex: 1;">
-                            <label style="font-size: 12px; color: #666;">X % (0-100):</label>
-                            <input type="number" class="x-position" min="0" max="100" value="50" 
-                                   style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
-                        </div>
-                        <div style="flex: 1;">
-                            <label style="font-size: 12px; color: #666;">Y % (0-100):</label>
-                            <input type="number" class="y-position" min="0" max="100" value="75" 
-                                   style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
-                        Actions:
-                    </label>
-                    <div style="display: flex; gap: 8px; align-items: end; height: 100%;">
-                        <button class="generate-composite-btn" 
-                                style="flex: 1; background: #28a745; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">
-                            🚀 Generate Composite
-                        </button>
-                        <button class="auto-fill-btn" 
-                                style="background: #6c757d; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                            📝 Auto-fill
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-                <div>
-                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
-                        Vehicle Description:
-                    </label>
-                    <textarea class="vehicle-description" rows="3" 
-                              style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"
-                              placeholder="Auto-generated from page data..."></textarea>
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #555;">
-                        Product Description:
-                    </label>
-                    <textarea class="product-description" rows="3" 
-                              style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"
-                              placeholder="Auto-generated from page data..."></textarea>
-                </div>
-            </div>
-
-            <!-- Debug Image Previews -->
-            <div class="image-previews" style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; display: none;">
-                <h5 style="margin: 0 0 12px 0; color: #333; font-size: 14px;">🔍 Image Preview (Debug)</h5>
-                <div style="display: flex; gap: 16px; align-items: flex-start;">
-                    <div style="flex: 1; text-align: center;">
-                        <div style="font-weight: bold; margin-bottom: 8px; color: #007bff; font-size: 12px;">Vehicle Scene</div>
-                        <img class="vehicle-preview" style="max-width: 200px; max-height: 150px; width: auto; height: auto; border: 2px solid #007bff; border-radius: 4px; object-fit: contain;" />
-                        <div class="vehicle-url" style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all;"></div>
-                    </div>
-                    <div style="flex: 1; text-align: center;">
-                        <div style="font-weight: bold; margin-bottom: 8px; color: #28a745; font-size: 12px;">Product</div>
-                        <img class="product-preview" style="max-width: 200px; max-height: 150px; width: auto; height: auto; border: 2px solid #28a745; border-radius: 4px; object-fit: contain;" />
-                        <div class="product-url" style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all;"></div>
-                    </div>
+                <!-- Product Image Preview -->
+                <div class="debug-product-preview" style="text-align: center; background: #ffffff; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; display: none;">
+                    <div style="font-weight: bold; margin-bottom: 8px; color: #28a745; font-size: 12px;">🛞 Product Image</div>
+                    <img class="product-preview-img" style="max-width: 100%; max-height: 200px; border: 2px solid #28a745; border-radius: 4px; object-fit: contain;" />
+                    <div class="product-preview-url" style="font-size: 10px; color: #666; margin-top: 4px; word-break: break-all;"></div>
                 </div>
             </div>
 
@@ -642,6 +677,9 @@ console.log("searchStrings", searchStrings);
 
         // Add event handlers
         this.setupInterfaceEventHandlers(container);
+        
+        // Update previews after setup
+        this.updateImagePreviews(container);
     }
 
     async populateImageOptions(container: HTMLElement) {
@@ -688,22 +726,44 @@ console.log("searchStrings", searchStrings);
             }
         });
 
-        // Find product images (wheels-compressed)
-        let productImages = document.querySelectorAll('img[src*="wheels-compressed"]');
+        // Find product images - start with wheels-compressed
+        const wheelsCompressedImages = Array.from(document.querySelectorAll('img[src*="wheels-compressed"]')) as HTMLImageElement[];
         
-        // If no wheels-compressed images found, try alternatives
-        if (productImages.length === 0) {
-            productImages = document.querySelectorAll('img[src*="wheel"], img[src*="rim"]');
+        // Add images from main-slider-container (these could be product images)
+        let allProductImages: HTMLImageElement[] = [...wheelsCompressedImages];
+        const mainSlider = document.getElementById('main-slider-container');
+        if (mainSlider) {
+            const mainSliderImages = Array.from(mainSlider.querySelectorAll('img')) as HTMLImageElement[];
+            // Combine and deduplicate by src
+            const imageUrls = new Set(allProductImages.map(img => img.src));
+            mainSliderImages.forEach(img => {
+                if (!imageUrls.has(img.src)) {
+                    allProductImages.push(img);
+                    imageUrls.add(img.src);
+                }
+            });
+        }
+        
+        // If still no images, try broader search
+        if (allProductImages.length === 0) {
+            const broadSearchImages = Array.from(document.querySelectorAll('img[src*="wheel"], img[src*="rim"]'));
+            allProductImages = broadSearchImages as HTMLImageElement[];
         }
 
-        console.log(`Found ${productImages.length} product images:`, Array.from(productImages).map((img: any) => img.src));
+        console.log(`Found ${allProductImages.length} product images:`, allProductImages.map((img: any) => img.src));
 
-        productImages.forEach((img: any) => {
+        allProductImages.forEach((img: HTMLImageElement) => {
             if (img.src && img.src.length > 0) {
-                const option = document.createElement('option');
-                option.value = img.src;
-                option.textContent = img.src.split('/').pop() || img.src;
-                productSelect.appendChild(option);
+                // Check if this image is already added to avoid duplicates
+                const existingOptions = Array.from(productSelect.options);
+                const isDuplicate = existingOptions.some(option => option.value === img.src);
+                
+                if (!isDuplicate) {
+                    const option = document.createElement('option');
+                    option.value = img.src;
+                    option.textContent = img.src.split('/').pop() || img.src;
+                    productSelect.appendChild(option);
+                }
             }
         });
 
@@ -722,7 +782,7 @@ console.log("searchStrings", searchStrings);
         }
 
         // Add debug info to UI if no images found
-        if (vehicleImages.length === 0 && productImages.length === 0) {
+        if (vehicleImages.length === 0 && allProductImages.length === 0) {
             const debugInfo = document.createElement('div');
             debugInfo.style.cssText = 'background: #fff3cd; border: 1px solid #ffeaa7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 12px;';
             debugInfo.innerHTML = '⚠️ No images detected on this page. This feature works best on Custom Wheel Offset product gallery pages.';
@@ -831,6 +891,8 @@ console.log("searchStrings", searchStrings);
     setupInterfaceEventHandlers(container: HTMLElement) {
         const generateBtn = container.querySelector('.generate-composite-btn') as HTMLButtonElement;
         const autoFillBtn = container.querySelector('.auto-fill-btn') as HTMLButtonElement;
+        const advancedToggleBtn = container.querySelector('.advanced-toggle-btn') as HTMLButtonElement;
+        const debugToggleBtn = container.querySelector('.debug-toggle-btn') as HTMLButtonElement;
         const vehicleSelect = container.querySelector('.vehicle-image-select') as HTMLSelectElement;
         const productSelect = container.querySelector('.product-image-select') as HTMLSelectElement;
 
@@ -844,18 +906,48 @@ console.log("searchStrings", searchStrings);
             this.generateDescriptionsForInterface(container);
         });
 
+        // Advanced toggle handler
+        advancedToggleBtn.addEventListener('click', () => {
+            this.toggleAdvancedPanel(container);
+        });
+
+        // Debug toggle handler
+        if (debugToggleBtn) {
+            debugToggleBtn.addEventListener('click', () => {
+                this.toggleDebugPanel(container);
+            });
+        }
+
         // Image preview handlers
         vehicleSelect.addEventListener('change', () => {
             this.updateImagePreviews(container);
+            this.setupVehicleImagePositioning(container);
         });
 
         productSelect.addEventListener('change', () => {
             this.updateImagePreviews(container);
         });
 
-        // Update previews after initial population
+        // Position mode handlers
+        const positionModeRadios = container.querySelectorAll('.position-mode-radio') as NodeListOf<HTMLInputElement>;
+        positionModeRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                this.updatePositionMode(container);
+            });
+        });
+
+        // Clear points handler
+        const clearPointsBtn = container.querySelector('.clear-points-btn') as HTMLButtonElement;
+        if (clearPointsBtn) {
+            clearPointsBtn.addEventListener('click', () => {
+                this.clearPositionPoints(container);
+            });
+        }
+
+        // Update previews and setup positioning after initial population
         setTimeout(() => {
             this.updateImagePreviews(container);
+            this.setupVehicleImagePositioning(container);
         }, 500);
     }
 
@@ -876,10 +968,9 @@ console.log("searchStrings", searchStrings);
             // Get form values
             const vehicleSelect = container.querySelector('.vehicle-image-select') as HTMLSelectElement;
             const productSelect = container.querySelector('.product-image-select') as HTMLSelectElement;
-            const xInput = container.querySelector('.x-position') as HTMLInputElement;
-            const yInput = container.querySelector('.y-position') as HTMLInputElement;
             const vehicleTextarea = container.querySelector('.vehicle-description') as HTMLTextAreaElement;
             const productTextarea = container.querySelector('.product-description') as HTMLTextAreaElement;
+            const canvas = container.querySelector('.position-canvas') as HTMLCanvasElement;
 
             const vehicleImageUrl = vehicleSelect.value;
             const productImageUrl = productSelect.value;
@@ -888,8 +979,19 @@ console.log("searchStrings", searchStrings);
                 throw new Error('Please select both vehicle and product images');
             }
 
-            const xPercent = parseFloat(xInput.value);
-            const yPercent = parseFloat(yInput.value);
+            // Get position data from vehicle positioning canvas
+            const vehicleCanvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
+            const points = JSON.parse(vehicleCanvas?.dataset.points || '[]');
+            if (points.length === 0) {
+                throw new Error('Please click on the vehicle image to set product position');
+            }
+
+            // Convert canvas coordinates to percentages
+            const positionData = points.map((point: any) => ({
+                xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
+                yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
+            }));
+
             const vehicleDescription = vehicleTextarea.value.trim();
             const productDescription = productTextarea.value.trim();
 
@@ -912,10 +1014,7 @@ console.log("searchStrings", searchStrings);
             const request = {
                 sceneUrl: vehicleImageUrl,
                 productUrl: productImageUrl,
-                dropPosition: {
-                    xPercent,
-                    yPercent
-                },
+                dropPosition: positionData, // Now sends array of points
                 sceneDescription: vehicleDescription,
                 productDescription: productDescription
             };
@@ -930,19 +1029,25 @@ console.log("searchStrings", searchStrings);
 
             // Show result
             resultDiv.style.display = 'block';
+            const baseUrl = 'http://localhost:3000';
+            const fullImageUrl = response.finalImageUrl.startsWith('http') ? response.finalImageUrl : `${baseUrl}${response.finalImageUrl}`;
+            const fullDebugUrl = response.debugImageUrl && !response.debugImageUrl.startsWith('data:') && !response.debugImageUrl.startsWith('http') 
+                ? `${baseUrl}${response.debugImageUrl}` 
+                : response.debugImageUrl;
+            
             resultDiv.innerHTML = `
                 <div style="border: 1px solid #ddd; border-radius: 8px; padding: 16px; background: white;">
                     <h5 style="margin: 0 0 12px 0; color: #333;">🎨 Generated Composite Image:</h5>
                     <div style="text-align: center; margin-bottom: 12px;">
-                        <img src="${response.finalImageUrl}" alt="Generated Composite" 
+                        <img src="${fullImageUrl}" alt="Generated Composite" 
                              style="max-width: 100%; max-height: 400px; height: auto; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     </div>
                     <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 12px;">
-                        <a href="${response.finalImageUrl}" download="composite-image.jpg" 
+                        <a href="${fullImageUrl}" download="composite-image.jpg" 
                            style="display: inline-block; background: #007bff; color: white; text-decoration: none; padding: 8px 16px; border-radius: 4px; font-size: 14px;">
                             💾 Download Image
                         </a>
-                        <button onclick="navigator.share({files: [new File([await fetch('${response.finalImageUrl}').then(r => r.blob())], 'composite.jpg')]})" 
+                        <button onclick="navigator.share({files: [new File([await fetch('${fullImageUrl}').then(r => r.blob())], 'composite.jpg')]})" 
                                 style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">
                             📤 Share
                         </button>
@@ -951,9 +1056,9 @@ console.log("searchStrings", searchStrings);
                         <summary style="cursor: pointer; font-size: 12px; color: #666; margin-bottom: 8px;">🔧 Debug Information</summary>
                         <div style="font-size: 11px; color: #666; background: #f8f9fa; padding: 8px; border-radius: 4px;">
                             <p style="margin: 0 0 8px 0;"><strong>AI Prompt:</strong> ${response.finalPrompt}</p>
-                            ${response.debugImageUrl ? `
+                            ${fullDebugUrl ? `
                                 <p style="margin: 0 0 4px 0;"><strong>Debug Image:</strong></p>
-                                <img src="${response.debugImageUrl}" alt="Debug" style="max-width: 200px; height: auto; border: 1px solid #ddd; border-radius: 4px;">
+                                <img src="${fullDebugUrl}" alt="Debug" style="max-width: 200px; height: auto; border: 1px solid #ddd; border-radius: 4px;">
                             ` : ''}
                         </div>
                     </details>
@@ -1220,10 +1325,10 @@ console.log("searchStrings", searchStrings);
             const request = {
                 sceneUrl,
                 productUrl,
-                dropPosition: {
+                dropPosition: [{
                     xPercent,
                     yPercent
-                },
+                }],
                 sceneDescription,
                 productDescription
             };
@@ -1238,12 +1343,18 @@ console.log("searchStrings", searchStrings);
 
             // Show result
             resultDiv.style.display = 'block';
+            const baseUrl = 'http://localhost:3000';
+            const fullImageUrl = response.finalImageUrl.startsWith('http') ? response.finalImageUrl : `${baseUrl}${response.finalImageUrl}`;
+            const fullDebugUrl = response.debugImageUrl && !response.debugImageUrl.startsWith('data:') && !response.debugImageUrl.startsWith('http') 
+                ? `${baseUrl}${response.debugImageUrl}` 
+                : response.debugImageUrl;
+            
             resultDiv.innerHTML = `
                 <h5 style="margin: 0 0 8px 0; color: #333;">Generated Composite:</h5>
-                <img src="${response.finalImageUrl}" alt="Generated Composite" 
+                <img src="${fullImageUrl}" alt="Generated Composite" 
                      style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px;">
                 <div style="margin-bottom: 8px;">
-                    <a href="${response.finalImageUrl}" download="composite-image.jpg" 
+                    <a href="${fullImageUrl}" download="composite-image.jpg" 
                        style="display: inline-block; background: #007bff; color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 12px;">
                         💾 Download Image
                     </a>
@@ -1252,7 +1363,7 @@ console.log("searchStrings", searchStrings);
                     <summary style="cursor: pointer; font-size: 12px; color: #666;">Debug Info</summary>
                     <div style="margin-top: 4px; font-size: 11px; color: #999;">
                         <p><strong>Final Prompt:</strong> ${response.finalPrompt}</p>
-                        ${response.debugImageUrl ? `<img src="${response.debugImageUrl}" alt="Debug" style="max-width: 200px; height: auto; border: 1px solid #ddd;">` : ''}
+                        ${fullDebugUrl ? `<img src="${fullDebugUrl}" alt="Debug" style="max-width: 200px; height: auto; border: 1px solid #ddd;">` : ''}
                     </div>
                 </details>
             `;
@@ -1380,53 +1491,267 @@ console.log("searchStrings", searchStrings);
     updateImagePreviews(container: HTMLElement) {
         const vehicleSelect = container.querySelector('.vehicle-image-select') as HTMLSelectElement;
         const productSelect = container.querySelector('.product-image-select') as HTMLSelectElement;
-        const previewsDiv = container.querySelector('.image-previews') as HTMLDivElement;
-        const vehiclePreview = container.querySelector('.vehicle-preview') as HTMLImageElement;
-        const productPreview = container.querySelector('.product-preview') as HTMLImageElement;
-        const vehicleUrl = container.querySelector('.vehicle-url') as HTMLDivElement;
-        const productUrl = container.querySelector('.product-url') as HTMLDivElement;
+        
+        if (!vehicleSelect || !productSelect) return;
+        
+        const vehicleUrl = vehicleSelect.value;
+        const productUrl = productSelect.value;
+        
+        // Update full-width vehicle preview
+        const vehiclePreviewContainer = container.querySelector('.vehicle-image-preview') as HTMLElement;
+        const vehiclePreviewImg = container.querySelector('.vehicle-preview-img') as HTMLImageElement;
+        const vehiclePreviewUrl = container.querySelector('.vehicle-preview-url') as HTMLElement;
+        
+        if (vehiclePreviewContainer && vehiclePreviewImg && vehiclePreviewUrl) {
+            if (vehicleUrl) {
+                vehiclePreviewContainer.style.display = 'block';
+                vehiclePreviewImg.src = vehicleUrl;
+                vehiclePreviewUrl.textContent = vehicleUrl.split('/').pop() || '';
+            } else {
+                vehiclePreviewContainer.style.display = 'none';
+            }
+        }
+        
+        // Update debug product preview
+        const debugProductPreview = container.querySelector('.debug-product-preview') as HTMLElement;
+        const productPreviewImg = container.querySelector('.product-preview-img') as HTMLImageElement;
+        const productPreviewUrl = container.querySelector('.product-preview-url') as HTMLElement;
+        
+        if (debugProductPreview && productPreviewImg && productPreviewUrl) {
+            if (productUrl) {
+                debugProductPreview.style.display = 'block';
+                productPreviewImg.src = productUrl;
+                productPreviewUrl.textContent = productUrl.split('/').pop() || '';
+            } else {
+                debugProductPreview.style.display = 'none';
+            }
+        }
+    }
+
+    toggleAdvancedPanel(container: HTMLElement) {
+        const advancedPanel = container.querySelector('.advanced-panel') as HTMLDivElement;
+        const toggleBtn = container.querySelector('.advanced-toggle-btn') as HTMLButtonElement;
+        
+        if (advancedPanel.style.display === 'none') {
+            advancedPanel.style.display = 'block';
+            toggleBtn.textContent = '⚙️ Hide Advanced';
+            toggleBtn.style.background = '#6c757d';
+        } else {
+            advancedPanel.style.display = 'none';
+            toggleBtn.textContent = '⚙️ Advanced';
+            toggleBtn.style.background = '#17a2b8';
+        }
+    }
+
+    toggleDebugPanel(container: HTMLElement) {
+        const debugPanel = container.querySelector('.debug-panel') as HTMLDivElement;
+        const toggleBtn = container.querySelector('.debug-toggle-btn') as HTMLButtonElement;
+        
+        if (debugPanel.style.display === 'none') {
+            debugPanel.style.display = 'block';
+            toggleBtn.textContent = '🐛 Hide Debug';
+            toggleBtn.style.background = '#e0a800';
+            toggleBtn.style.color = '#ffffff';
+        } else {
+            debugPanel.style.display = 'none';
+            toggleBtn.textContent = '🐛 Debug';
+            toggleBtn.style.background = '#ffc107';
+            toggleBtn.style.color = '#212529';
+        }
+    }
+
+    setupVehicleImagePositioning(container: HTMLElement) {
+        const vehicleSelect = container.querySelector('.vehicle-image-select') as HTMLSelectElement;
+        const vehiclePreviewImg = container.querySelector('.vehicle-preview-img') as HTMLImageElement;
+        const vehicleCanvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
+        const vehicleContainer = container.querySelector('.vehicle-image-container') as HTMLDivElement;
 
         const vehicleImageUrl = vehicleSelect.value;
-        const productImageUrl = productSelect.value;
 
-        // Show/hide preview section
-        if (vehicleImageUrl || productImageUrl) {
-            previewsDiv.style.display = 'block';
-        } else {
-            previewsDiv.style.display = 'none';
+        if (!vehicleImageUrl || !vehiclePreviewImg || !vehicleCanvas) {
             return;
         }
 
-        // Update vehicle preview
-        if (vehicleImageUrl) {
-            vehiclePreview.src = vehicleImageUrl;
-            vehiclePreview.style.display = 'block';
-            vehicleUrl.textContent = vehicleImageUrl;
-        } else {
-            vehiclePreview.style.display = 'none';
-            vehicleUrl.textContent = 'No vehicle selected';
-        }
+        // Wait for the vehicle image to load
+        vehiclePreviewImg.onload = () => {
+            // Set canvas to exactly match the displayed image
+            const imgRect = vehiclePreviewImg.getBoundingClientRect();
+            const containerRect = vehicleContainer.getBoundingClientRect();
+            
+            vehicleCanvas.width = vehiclePreviewImg.offsetWidth;
+            vehicleCanvas.height = vehiclePreviewImg.offsetHeight;
+            vehicleCanvas.style.width = `${vehiclePreviewImg.offsetWidth}px`;
+            vehicleCanvas.style.height = `${vehiclePreviewImg.offsetHeight}px`;
+            
+            // Position canvas exactly over the image
+            vehicleCanvas.style.position = 'absolute';
+            vehicleCanvas.style.top = '0';
+            vehicleCanvas.style.left = '0';
+            vehicleCanvas.style.zIndex = '10';
+            vehicleCanvas.style.display = 'block';
 
-        // Update product preview
-        if (productImageUrl) {
-            productPreview.src = productImageUrl;
-            productPreview.style.display = 'block';
-            productUrl.textContent = productImageUrl;
-        } else {
-            productPreview.style.display = 'none';
-            productUrl.textContent = 'No product selected';
-        }
+            // Store image dimensions for coordinate calculation
+            vehicleCanvas.dataset.imageWidth = vehiclePreviewImg.naturalWidth.toString();
+            vehicleCanvas.dataset.imageHeight = vehiclePreviewImg.naturalHeight.toString();
 
-        // Add error handling for broken images
-        vehiclePreview.onerror = () => {
-            vehiclePreview.style.display = 'none';
-            vehicleUrl.textContent = `❌ Failed to load: ${vehicleImageUrl}`;
+            // Initialize points if not already set
+            if (!vehicleCanvas.dataset.points) {
+                vehicleCanvas.dataset.points = JSON.stringify([]);
+            }
+
+            // Add click handler
+            this.setupVehicleCanvasClickHandler(container, vehicleCanvas);
+            
+            // Update display to show any existing points
+            this.updateVehiclePositionDisplay(container, vehicleCanvas);
         };
 
-        productPreview.onerror = () => {
-            productPreview.style.display = 'none';
-            productUrl.textContent = `❌ Failed to load: ${productImageUrl}`;
-        };
+        // Trigger load if image is already cached
+        if (vehiclePreviewImg.complete) {
+            vehiclePreviewImg.onload(null as any);
+        }
+    }
+
+    setupVehicleCanvasClickHandler(container: HTMLElement, canvas: HTMLCanvasElement) {
+        // Remove existing event listeners by cloning
+        const newCanvas = canvas.cloneNode(true) as HTMLCanvasElement;
+        canvas.parentNode?.replaceChild(newCanvas, canvas);
+        
+        // Initialize position data
+        if (!newCanvas.dataset.points) {
+            newCanvas.dataset.points = JSON.stringify([]);
+        }
+
+        // Copy over dataset properties
+        newCanvas.dataset.imageWidth = canvas.dataset.imageWidth;
+        newCanvas.dataset.imageHeight = canvas.dataset.imageHeight;
+        newCanvas.dataset.points = canvas.dataset.points;
+
+        newCanvas.addEventListener('click', (event) => {
+            this.handleVehicleCanvasClick(container, newCanvas, event);
+        });
+    }
+
+    handleVehicleCanvasClick(container: HTMLElement, canvas: HTMLCanvasElement, event: MouseEvent) {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        // Get current points
+        const points = JSON.parse(canvas.dataset.points || '[]');
+        const mode = (container.querySelector('.position-mode-radio:checked') as HTMLInputElement)?.value || 'point';
+
+        if (mode === 'point') {
+            // Point mode: replace existing point
+            canvas.dataset.points = JSON.stringify([{ x, y }]);
+        } else {
+            // Polygon mode: add point or close polygon
+            if (points.length > 2) {
+                // Check if clicking near first point to close polygon
+                const firstPoint = points[0];
+                const distance = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
+                if (distance < 10) {
+                    // Close polygon - don't add the same point again
+                    this.updateVehiclePositionDisplay(container, canvas);
+                    return;
+                }
+            }
+            
+            // Add new point
+            points.push({ x, y });
+            canvas.dataset.points = JSON.stringify(points);
+        }
+
+        this.updateVehiclePositionDisplay(container, canvas);
+    }
+
+    updateVehiclePositionDisplay(container: HTMLElement, canvas: HTMLCanvasElement) {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const points = JSON.parse(canvas.dataset.points || '[]');
+        const mode = (container.querySelector('.position-mode-radio:checked') as HTMLInputElement)?.value || 'point';
+        const coordinates = container.querySelector('.position-coordinates') as HTMLDivElement;
+        const controls = container.querySelector('.position-controls') as HTMLDivElement;
+        const polygonInstructions = container.querySelector('.polygon-instructions') as HTMLElement;
+
+        // Clear canvas and draw points/lines only (no background image needed since it's overlaid)
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw points and lines
+        if (points.length > 0) {
+            ctx.strokeStyle = '#ff0000';
+            ctx.fillStyle = '#ff0000';
+            ctx.lineWidth = 3;
+
+            points.forEach((point: any, index: number) => {
+                // Draw point with white outline for better visibility
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ff0000';
+                ctx.fill();
+
+                // Draw lines for polygon
+                if (mode === 'polygon' && index > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(points[index - 1].x, points[index - 1].y);
+                    ctx.lineTo(point.x, point.y);
+                    ctx.stroke();
+                }
+            });
+
+            // Draw closing line for completed polygon
+            if (mode === 'polygon' && points.length > 2) {
+                ctx.beginPath();
+                ctx.moveTo(points[points.length - 1].x, points[points.length - 1].y);
+                ctx.lineTo(points[0].x, points[0].y);
+                ctx.stroke();
+            }
+        }
+
+        // Update coordinate display
+        if (points.length > 0) {
+            const percentagePoints = points.map((point: any) => ({
+                xPercent: Math.round((point.x / canvas.width) * 100),
+                yPercent: Math.round((point.y / canvas.height) * 100)
+            }));
+
+            if (mode === 'point') {
+                coordinates.textContent = `Point: ${percentagePoints[0].xPercent}%, ${percentagePoints[0].yPercent}%`;
+            } else {
+                coordinates.textContent = `Polygon: ${points.length} points`;
+            }
+            
+            controls.style.display = 'block';
+            
+            if (mode === 'polygon' && points.length >= 2 && points.length < 10) {
+                polygonInstructions.style.display = 'inline';
+            } else {
+                polygonInstructions.style.display = 'none';
+            }
+        } else {
+            coordinates.textContent = '';
+            controls.style.display = 'none';
+        }
+    }
+
+    updatePositionMode(container: HTMLElement) {
+        const canvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
+        if (canvas) {
+            this.clearPositionPoints(container);
+        }
+    }
+
+    clearPositionPoints(container: HTMLElement) {
+        const canvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
+        if (canvas) {
+            canvas.dataset.points = JSON.stringify([]);
+            this.updateVehiclePositionDisplay(container, canvas);
+        }
     }
 }
 

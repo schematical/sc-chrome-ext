@@ -22,10 +22,10 @@ Integrate AI-powered image compositing functionality by sending positioned vehic
 interface CompositeImageRequest {
   sceneUrl: string;          // Vehicle image URL
   productUrl: string;        // Product image URL  
-  dropPosition: {
+  dropPosition: Array<{
     xPercent: number;        // X position as percentage (0-100)
     yPercent: number;        // Y position as percentage (0-100)
-  };
+  }>;                        // Array of points (single point or polygon)
   sceneDescription: string;  // AI context for vehicle image
   productDescription: string; // AI context for product image
 }
@@ -151,17 +151,16 @@ interface ProductPosition {
 
 ### Position Coordinate Conversion
 ```typescript
-// Convert pixel coordinates to percentages
-function convertToPercentages(
-  pixelX: number, 
-  pixelY: number, 
-  imageWidth: number, 
-  imageHeight: number
-): { xPercent: number; yPercent: number } {
-  return {
-    xPercent: (pixelX / imageWidth) * 100,
-    yPercent: (pixelY / imageHeight) * 100
-  };
+// Convert array of pixel coordinates to percentages
+function convertPointsToPercentages(
+  points: Array<{x: number, y: number}>,
+  canvasWidth: number, 
+  canvasHeight: number
+): Array<{xPercent: number; yPercent: number}> {
+  return points.map(point => ({
+    xPercent: Math.round((point.x / canvasWidth) * 100),
+    yPercent: Math.round((point.y / canvasHeight) * 100)
+  }));
 }
 ```
 
@@ -266,6 +265,7 @@ function generateProductDescription(productUrl: string): string {
 - Composite image display with download links
 - Debug information panel
 - **NEW: "Set Vehicle" workflow from gallery pages to product pages**
+- **NEW: Advanced visual positioning system with point/polygon modes**
 
 ### 🛠️ How It Works
 
@@ -312,6 +312,13 @@ function generateProductDescription(productUrl: string): string {
 - Visual indicators for stored vehicles in dropdowns
 - Automatic detection of vehicle gallery vs product pages
 
+**NEW: Advanced Positioning System**
+- Visual point/polygon positioning replacing simple X/Y inputs
+- Interactive canvas with vehicle image background for precise clicking
+- Two modes: Point (single click) and Polygon (multiple points with auto-close)
+- Real-time coordinate display and visual feedback
+- Advanced panel organization with collapsible interface
+
 ### 📁 Files Created/Modified
 
 **New Files:**
@@ -339,17 +346,40 @@ The implementation is complete and ready for testing!
 4. Navigate to a product page
 5. Open compositing interface - stored vehicle should appear as "📋 Stored: [Vehicle Info]"
 
+**NEW: To test advanced positioning:**
+1. Open compositing interface on any product page
+2. Click "⚙️ Advanced" button to expand advanced panel
+3. Select vehicle and product images
+4. Choose Point or Polygon mode
+5. Click on the vehicle image canvas to set positions
+6. See real-time coordinate feedback and visual indicators
+
 **Example Request Sent to API:**
 ```json
 {
   "sceneUrl": "https://images.customwheeloffset.com/web-compressed/670291-12-2019-tacoma-toyota-readylift-leveling-kit-body-lift-xd-bully-black.jpg",
   "productUrl": "https://images.customwheeloffset.com/wheels-compressed/xdwheels/xd135/xd135_grenade_black.jpg",
-  "dropPosition": {
-    "xPercent": 50,
-    "yPercent": 75
-  },
+  "dropPosition": [
+    {"xPercent": 50, "yPercent": 75}
+  ],
   "sceneDescription": "This is a 2019 Toyota Tacoma equipped with XD Grenade wheels, wheel size: 18x9, suspension: ReadyLift Leveling Kit. The image shows the vehicle's wheel and tire setup clearly.",
   "productDescription": "This is a wheel/rim XD Wheels Grenade with black finish"
+}
+```
+
+**Example Polygon Request:**
+```json
+{
+  "sceneUrl": "https://...",
+  "productUrl": "https://...",
+  "dropPosition": [
+    {"xPercent": 45, "yPercent": 70},
+    {"xPercent": 55, "yPercent": 70},
+    {"xPercent": 60, "yPercent": 80},
+    {"xPercent": 40, "yPercent": 80}
+  ],
+  "sceneDescription": "Vehicle description...",
+  "productDescription": "Product description..."
 }
 ```
 

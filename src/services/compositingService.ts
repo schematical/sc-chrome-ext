@@ -3,10 +3,10 @@
 export interface CompositeImageRequest {
     sceneUrl: string;
     productUrl: string;
-    dropPosition: {
+    dropPosition: Array<{
         xPercent: number;
         yPercent: number;
-    };
+    }>;
     sceneDescription: string;
     productDescription: string;
 }
@@ -59,18 +59,22 @@ export class CompositingService {
 
         if (!request.dropPosition) {
             errors.push('Drop position is required');
+        } else if (!Array.isArray(request.dropPosition) || request.dropPosition.length === 0) {
+            errors.push('dropPosition must be a non-empty array of coordinates');
         } else {
-            if (typeof request.dropPosition.xPercent !== 'number' || 
-                request.dropPosition.xPercent < 0 || 
-                request.dropPosition.xPercent > 100) {
-                errors.push('xPercent must be a number between 0 and 100');
-            }
-
-            if (typeof request.dropPosition.yPercent !== 'number' || 
-                request.dropPosition.yPercent < 0 || 
-                request.dropPosition.yPercent > 100) {
-                errors.push('yPercent must be a number between 0 and 100');
-            }
+            // Validate each point in the array
+            request.dropPosition.forEach((point, index) => {
+                if (typeof point.xPercent !== 'number' || 
+                    point.xPercent < 0 || 
+                    point.xPercent > 100) {
+                    errors.push(`Point ${index + 1}: xPercent must be a number between 0 and 100`);
+                }
+                if (typeof point.yPercent !== 'number' || 
+                    point.yPercent < 0 || 
+                    point.yPercent > 100) {
+                    errors.push(`Point ${index + 1}: yPercent must be a number between 0 and 100`);
+                }
+            });
         }
 
         if (!request.sceneDescription || request.sceneDescription.trim().length === 0) {
