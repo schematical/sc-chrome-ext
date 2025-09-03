@@ -810,21 +810,37 @@ console.log("searchStrings", searchStrings);
                 }
             }
 
-            if (storedVehicle && storedVehicle.imageUrl) {
+            if (storedVehicle) {
                 // Check if vehicle was set recently (within 24 hours)
                 const hoursSinceSet = (Date.now() - storedVehicle.setAt) / (1000 * 60 * 60);
                 if (hoursSinceSet < 24) {
-                    const option = document.createElement('option');
-                    option.value = storedVehicle.imageUrl;
-                    option.textContent = `📋 Stored: ${storedVehicle.info || 'Vehicle from Gallery'}`;
-                    option.style.backgroundColor = '#e3f2fd';
-                    option.style.fontWeight = 'bold';
                     
-                    // Insert as second option (after "Select Vehicle Image")
-                    if (vehicleSelect.options.length > 0) {
-                        vehicleSelect.insertBefore(option, vehicleSelect.options[1]);
-                    } else {
+                    // Handle new format with multiple images
+                    if (storedVehicle.images && Array.isArray(storedVehicle.images)) {
+                        storedVehicle.images.forEach((image: any, index: number) => {
+                            const option = document.createElement('option');
+                            option.value = image.url;
+                            option.textContent = `📋 Gallery: ${image.title || `Image ${index + 1}`}`;
+                            option.style.backgroundColor = '#e3f2fd';
+                            if (image.isMain) {
+                                option.style.fontWeight = 'bold';
+                            }
+                            
+                            // Insert stored images after the "Choose vehicle image..." option
+                            vehicleSelect.appendChild(option);
+                        });
+                        console.log('Added stored vehicle gallery images to select:', storedVehicle.images.length, 'images');
+                        
+                    } else if (storedVehicle.imageUrl) {
+                        // Handle legacy format (single image)
+                        const option = document.createElement('option');
+                        option.value = storedVehicle.imageUrl;
+                        option.textContent = `📋 Stored: ${storedVehicle.info || 'Vehicle from Gallery'}`;
+                        option.style.backgroundColor = '#e3f2fd';
+                        option.style.fontWeight = 'bold';
+                        
                         vehicleSelect.appendChild(option);
+                        console.log('Added legacy stored vehicle to select:', storedVehicle);
                     }
                 }
             }
@@ -1389,42 +1405,61 @@ console.log("searchStrings", searchStrings);
     }
 
     createSetVehicleInterface(container: HTMLElement) {
-        const vehicleImageUrl = this.getCurrentVehicleImageUrl();
+        const galleryImages = this.getGalleryImages();
         const vehicleInfo = this.extractVehicleGalleryInfo();
 
         container.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                <div style="font-weight: bold; color: #1976d2;">🚗 Set as Vehicle Scene</div>
-                <div style="font-size: 12px; color: #666;">
-                    ${vehicleInfo ? vehicleInfo : 'Use this vehicle for compositing'}
+            <div style="margin-bottom: 16px;">
+                <div style="font-weight: bold; color: #1976d2; margin-bottom: 8px;">🚗 Set as Vehicle Scene</div>
+                <div style="font-size: 12px; color: #666; margin-bottom: 12px;">
+                    ${vehicleInfo ? vehicleInfo : 'Save this vehicle for compositing'}
                 </div>
-                <button class="set-vehicle-button" style="
-                    background: #2196f3;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 12px;
-                    font-weight: bold;
-                ">Set Vehicle</button>
+                
+                <div class="vehicle-preview" style="margin-bottom: 12px; text-align: center; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">
+                    <img class="preview-image" src="${galleryImages[0]?.fullUrl || this.getCurrentVehicleImageUrl()}" style="max-width: 100%; max-height: 120px; border-radius: 4px;" />
+                    ${galleryImages.length > 1 ? `
+                        <div style="font-size: 11px; color: #666; margin-top: 4px;">
+                            Main image • ${galleryImages.length} total images will be saved
+                        </div>
+                    ` : ''}
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button class="set-vehicle-button" style="
+                        background: #2196f3;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: bold;
+                        flex: 1;
+                    ">Set Vehicle</button>
+                    ${galleryImages.length > 1 ? `
+                        <span style="font-size: 11px; color: #666;">${galleryImages.length} images</span>
+                    ` : ''}
+                </div>
             </div>
             <div class="set-vehicle-result" style="display: none; color: #2e7d32; font-weight: bold; font-size: 12px;"></div>
         `;
 
-        // Add event handler for the Set Vehicle button
+        // Add event handlers
         const setButton = container.querySelector('.set-vehicle-button') as HTMLButtonElement;
         const resultDiv = container.querySelector('.set-vehicle-result') as HTMLDivElement;
 
+        // Handle Set Vehicle button click
         setButton.addEventListener('click', async () => {
             try {
                 setButton.disabled = true;
                 setButton.textContent = 'Setting...';
 
-                await this.setVehicleForCompositing(vehicleImageUrl, vehicleInfo);
+                // Set the main image as the selected one (first image or current image as fallback)
+                const selectedImageUrl = galleryImages[0]?.fullUrl || this.getCurrentVehicleImageUrl();
+                await this.setVehicleForCompositing(galleryImages, vehicleInfo, selectedImageUrl);
 
                 resultDiv.style.display = 'block';
-                resultDiv.textContent = '✅ Vehicle set successfully!';
+                resultDiv.textContent = `✅ Vehicle set with ${galleryImages.length} image${galleryImages.length > 1 ? 's' : ''}!`;
                 setButton.textContent = '✓ Vehicle Set';
                 setButton.style.background = '#4caf50';
 
@@ -1459,6 +1494,88 @@ console.log("searchStrings", searchStrings);
         return '';
     }
 
+    getGalleryImages(): Array<{thumbUrl: string, fullUrl: string, isMain: boolean}> {
+        const galleryImages: Array<{thumbUrl: string, fullUrl: string, isMain: boolean}> = [];
+        
+        try {
+            // Get the main image first
+            const mainImage = document.querySelector('img[src*="web-compressed"]') as HTMLImageElement;
+            if (mainImage) {
+                galleryImages.push({
+                    thumbUrl: mainImage.src,
+                    fullUrl: mainImage.src,
+                    isMain: true
+                });
+            }
+
+            // Find all gallery images (both main and thumbnails)
+            const allImages = Array.from(document.querySelectorAll('img'));
+            const vehicleImages = allImages.filter(img => {
+                return img.src && (
+                    img.src.includes('web-compressed') || 
+                    img.src.includes('thumb')
+                ) && (
+                    img.src.includes('2019-tacoma') ||
+                    img.src.includes(window.location.pathname.split('/')[2]) // Gallery ID
+                );
+            });
+
+            // Extract gallery ID pattern from current page URL
+            const urlMatch = window.location.pathname.match(/\/wheel-offset-gallery\/(\d+)\//);
+            const galleryId = urlMatch ? urlMatch[1] : null;
+
+            if (galleryId) {
+                vehicleImages.forEach(img => {
+                    if (img.src.includes(galleryId)) {
+                        // Convert thumbnail URL to full-size URL
+                        const fullUrl = img.src.includes('/thumb/') 
+                            ? img.src.replace('/thumb/', '/web-compressed/')
+                            : img.src;
+                        
+                        const thumbUrl = img.src;
+                        const isMain = img.src.includes('web-compressed') && img.src.includes(`${galleryId}-1-`);
+                        
+                        // Check if we already have this image (avoid duplicates)
+                        const exists = galleryImages.some(existing => existing.fullUrl === fullUrl);
+                        if (!exists) {
+                            galleryImages.push({
+                                thumbUrl,
+                                fullUrl,
+                                isMain
+                            });
+                        }
+                    }
+                });
+            }
+
+            // Sort images: main image first, then by filename
+            galleryImages.sort((a, b) => {
+                if (a.isMain && !b.isMain) return -1;
+                if (!a.isMain && b.isMain) return 1;
+                return a.fullUrl.localeCompare(b.fullUrl);
+            });
+
+            console.log('Found gallery images:', galleryImages);
+            
+        } catch (error) {
+            console.error('Error getting gallery images:', error);
+        }
+
+        // If no gallery images found, fallback to current image
+        if (galleryImages.length === 0) {
+            const fallbackUrl = this.getCurrentVehicleImageUrl();
+            if (fallbackUrl) {
+                galleryImages.push({
+                    thumbUrl: fallbackUrl,
+                    fullUrl: fallbackUrl,
+                    isMain: true
+                });
+            }
+        }
+
+        return galleryImages;
+    }
+
     extractVehicleGalleryInfo(): string {
         // Try to extract vehicle info from the page title or heading
         const heading = document.querySelector('h1') as HTMLElement;
@@ -1470,25 +1587,30 @@ console.log("searchStrings", searchStrings);
         return document.title.split('|')[0]?.trim() || '';
     }
 
-    async setVehicleForCompositing(imageUrl: string, vehicleInfo: string) {
-        // Store the vehicle info in chrome.storage.local for use in compositing
+    async setVehicleForCompositing(galleryImages: Array<{thumbUrl: string, fullUrl: string, isMain: boolean}>, vehicleInfo: string, selectedImageUrl?: string) {
+        // Store ALL gallery images for this vehicle in chrome.storage.local for use in compositing
+        const vehicleData = {
+            images: galleryImages.map(img => ({
+                url: img.fullUrl,
+                thumbnail: img.thumbUrl,
+                isMain: img.isMain,
+                title: `Vehicle Image ${galleryImages.indexOf(img) + 1}${img.isMain ? ' (Main)' : ''}`
+            })),
+            info: vehicleInfo,
+            selectedImageUrl: selectedImageUrl || galleryImages[0]?.fullUrl,
+            setAt: Date.now(),
+            source: 'gallery'
+        };
+
         if (typeof chrome !== 'undefined' && chrome.storage) {
             await chrome.storage.local.set({
-                currentVehicle: {
-                    imageUrl: imageUrl,
-                    info: vehicleInfo,
-                    setAt: Date.now(),
-                    source: 'gallery'
-                }
+                currentVehicle: vehicleData
             });
+            console.log('Stored vehicle with all gallery images:', vehicleData);
         } else {
             // Fallback to localStorage for testing
-            localStorage.setItem('currentVehicle', JSON.stringify({
-                imageUrl: imageUrl,
-                info: vehicleInfo,
-                setAt: Date.now(),
-                source: 'gallery'
-            }));
+            localStorage.setItem('currentVehicle', JSON.stringify(vehicleData));
+            console.log('Stored vehicle with all gallery images (localStorage):', vehicleData);
         }
     }
 
