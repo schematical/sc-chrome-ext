@@ -373,12 +373,16 @@ console.log("searchStrings", searchStrings);
             return;
         }
 
-        // Setup compositing UI in specific location
+        // Setup compositing UI in specific location (for product pages)
         this.injectCompositingUI();
+        
+        // Setup vehicle gallery UI (for gallery pages)
+        this.injectVehicleGalleryUI();
         
         // Re-inject UI when page content changes (for dynamic loading)
         const observer = new MutationObserver(() => {
             this.injectCompositingUI();
+            this.injectVehicleGalleryUI();
         });
         
         observer.observe(document.body, {
