@@ -623,6 +623,24 @@ console.log("searchStrings", searchStrings);
                     </div>
                 </div>
 
+                <!-- Context Images -->
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #555;">
+                        Context Images (Optional):
+                    </label>
+                    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                        Select multiple product images to include as context. Use polygon tool to outline products on each image.<br>
+                        <strong>Tip:</strong> Hold Ctrl (or Cmd on Mac) to select multiple images, or Shift+click for ranges.
+                    </div>
+                    <select class="context-image-select" multiple="multiple" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 8px; min-height: 80px;">
+                        <option value="">No context images</option>
+                    </select>
+                    
+                    <div class="context-images-container" style="margin-bottom: 12px;">
+                        <!-- Context image previews will be dynamically added here -->
+                    </div>
+                </div>
+
                 <!-- Descriptions -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                     <div>
@@ -684,6 +702,272 @@ console.log("searchStrings", searchStrings);
         
         // Update previews after setup
         this.updateImagePreviews(container);
+    }
+
+    async populateContextImageOptions(container: HTMLElement) {
+        const contextImageSelect = container.querySelector('.context-image-select') as HTMLSelectElement;
+        if (!contextImageSelect) return;
+
+        // Clear existing options except the first one
+        while (contextImageSelect.options.length > 1) {
+            contextImageSelect.remove(1);
+        }
+
+        // Get images specifically from the main slideshow
+        let allProductImages: HTMLImageElement[] = [];
+        const mainSlider = document.getElementById('main-slider-container');
+        if (mainSlider) {
+            // Get all images from the main slideshow
+            const mainSliderImages = Array.from(mainSlider.querySelectorAll('.slide img')) as HTMLImageElement[];
+            
+            // Filter out images with undefined src and use data-srcset as fallback
+            mainSliderImages.forEach(img => {
+                let imageUrl =  img.getAttribute('data-srcset') ;
+                
+                // If src is undefined, try data-srcset
+                if (!imageUrl || imageUrl === 'undefined') {
+                    imageUrl = img.getAttribute('data-srcset') || '';
+                }
+                
+                // Only add if we have a valid URL
+                if (imageUrl && imageUrl !== 'undefined' && imageUrl.length > 0) {
+                    allProductImages.push(img);
+                }
+            });
+        }
+
+        // Add context image options
+        allProductImages.forEach((img: HTMLImageElement) => {
+            let imageUrl =  img.getAttribute('data-srcset') ;
+                
+            // If src is undefined, try data-srcset
+            if (!imageUrl || imageUrl === 'undefined') {
+                imageUrl = img.getAttribute('data-srcset') || '';
+            }
+            
+            if (imageUrl && imageUrl !== 'undefined' && imageUrl.length > 0) {
+                const option = document.createElement('option');
+                option.value = imageUrl;
+                option.textContent = `${img.alt|| imageUrl}`;
+                contextImageSelect.appendChild(option);
+            }
+        });
+
+        // Add event listener for context image selection (multiple selection)
+        contextImageSelect.addEventListener('change', () => {
+            console.log('Context image selection changed:', {
+                selectedOptions: Array.from(contextImageSelect.selectedOptions).map(opt => ({ value: opt.value, text: opt.textContent })),
+                multiple: contextImageSelect.multiple,
+                selectedIndex: contextImageSelect.selectedIndex
+            });
+            this.handleContextImageSelection(container);
+        });
+    }
+
+    handleContextImageSelection(container: HTMLElement) {
+        const contextImageSelect = container.querySelector('.context-image-select') as HTMLSelectElement;
+        const contextImagesContainer = container.querySelector('.context-images-container') as HTMLDivElement;
+        
+        if (!contextImageSelect || !contextImagesContainer) return;
+
+        // Get all selected options
+        const selectedOptions = Array.from(contextImageSelect.selectedOptions);
+        
+        // Clear existing previews
+        contextImagesContainer.innerHTML = '';
+        
+        if (selectedOptions.length === 0) {
+            return;
+        }
+
+        // Create preview for each selected image
+        selectedOptions.forEach((option, index) => {
+            const imageUrl = option.value;
+            if (!imageUrl) return;
+            
+            const previewContainer = document.createElement('div');
+            previewContainer.className = 'context-image-preview';
+            previewContainer.style.cssText = 'margin-bottom: 16px; padding: 12px; background: #ffffff; border: 1px solid #dee2e6; border-radius: 4px;';
+            
+            const imageName = option.textContent || `Image ${index + 1}`;
+            
+            previewContainer.innerHTML = `
+                <div style="margin-bottom: 8px; font-weight: bold; color: #333; font-size: 12px;">
+                    ${imageName}
+                </div>
+                <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                    Click on the image below to draw polygons around products
+                </div>
+                <div class="context-canvas-container" style="position: relative; display: inline-block;">
+                    <img src="${imageUrl}" class="context-image" style="max-width: 100%; max-height: 200px; border: 2px solid #007bff; border-radius: 4px; display: block;">
+                    <canvas class="context-positioning-canvas" data-image-url="${imageUrl}" style="position: absolute; top: 0; left: 0; max-width: 100%; max-height: 200px; cursor: crosshair; pointer-events: auto;"></canvas>
+                    <div class="context-polygon-info" style="margin-top: 8px; font-size: 11px; color: #666;">
+                        <div class="context-position-coordinates"></div>
+                        <div class="context-position-controls" style="display: none;">
+                            <button class="context-clear-polygons-btn" style="background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 8px;">
+                                🗑️ Clear Polygons
+                            </button>
+                            <span class="context-polygon-instructions" style="font-style: italic;">
+                                Click first point again to close polygon
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            contextImagesContainer.appendChild(previewContainer);
+            
+            // Setup canvas for this image
+            const canvas = previewContainer.querySelector('.context-positioning-canvas') as HTMLCanvasElement;
+            if (canvas) {
+                this.setupContextImageCanvas(canvas, imageUrl);
+            }
+        });
+    }
+
+    setupContextImageCanvas(canvas: HTMLCanvasElement, imageUrl: string) {
+        // Find the corresponding image element
+        const container = canvas.closest('.context-canvas-container');
+        const img = container?.querySelector('.context-image') as HTMLImageElement;
+        
+        if (!img) return;
+        
+        // Wait for image to load to get its dimensions
+        const setupCanvas = () => {
+            // Set canvas size to match the displayed image size
+            const rect = img.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            
+            // Initialize polygon drawing
+            this.initializeContextPolygonDrawing(canvas);
+        };
+        
+        if (img.complete) {
+            setupCanvas();
+        } else {
+            img.onload = setupCanvas;
+        }
+    }
+
+    initializeContextPolygonDrawing(canvas: HTMLCanvasElement) {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        let currentPolygon: Array<{x: number, y: number}> = [];
+        let allPolygons: Array<Array<{x: number, y: number}>> = [];
+        let isDrawing = false;
+
+        const drawPolygon = (polygon: Array<{x: number, y: number}>, isCurrent: boolean = false) => {
+            if (polygon.length < 2) return;
+            
+            ctx.strokeStyle = isCurrent ? '#ff6b6b' : '#007bff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(polygon[0].x, polygon[0].y);
+            
+            for (let i = 1; i < polygon.length; i++) {
+                ctx.lineTo(polygon[i].x, polygon[i].y);
+            }
+            
+            if (isCurrent && polygon.length > 2) {
+                ctx.closePath();
+            }
+            
+            ctx.stroke();
+            
+            // Draw points
+            polygon.forEach((point, index) => {
+                ctx.fillStyle = index === 0 ? '#ff6b6b' : '#007bff';
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        };
+
+        const redrawCanvas = () => {
+            // Clear canvas (transparent)
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Redraw all completed polygons
+            allPolygons.forEach(polygon => drawPolygon(polygon));
+            
+            // Draw current polygon
+            if (currentPolygon.length > 0) {
+                drawPolygon(currentPolygon, true);
+            }
+            
+            // Update dataset with current polygon data
+            canvas.dataset.polygons = JSON.stringify(allPolygons);
+            canvas.dataset.currentPolygon = JSON.stringify(currentPolygon);
+        };
+
+        const updateContextPositionDisplay = () => {
+            const container = canvas.closest('.context-image-preview');
+            if (!container) return;
+            
+            const coordinatesDiv = container.querySelector('.context-position-coordinates') as HTMLDivElement;
+            const controlsDiv = container.querySelector('.context-position-controls') as HTMLDivElement;
+            
+            if (coordinatesDiv) {
+                const totalPoints = allPolygons.reduce((sum, polygon) => sum + polygon.length, 0) + currentPolygon.length;
+                coordinatesDiv.textContent = `Polygons: ${allPolygons.length} • Total Points: ${totalPoints}`;
+            }
+            
+            if (controlsDiv) {
+                controlsDiv.style.display = (allPolygons.length > 0 || currentPolygon.length > 0) ? 'block' : 'none';
+            }
+        };
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (currentPolygon.length === 0) {
+                // Start new polygon
+                currentPolygon = [{x, y}];
+                isDrawing = true;
+            } else {
+                // Check if clicking on first point to close polygon
+                const firstPoint = currentPolygon[0];
+                const distance = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
+                
+                if (distance < 10 && currentPolygon.length > 2) {
+                    // Close polygon
+                    allPolygons.push([...currentPolygon]);
+                    currentPolygon = [];
+                    isDrawing = false;
+                } else {
+                    // Add point to current polygon
+                    currentPolygon.push({x, y});
+                }
+            }
+            
+            redrawCanvas();
+            updateContextPositionDisplay();
+        });
+
+        // Add clear button functionality
+        const container = canvas.closest('.context-image-preview');
+        if (container) {
+            const clearBtn = container.querySelector('.context-clear-polygons-btn') as HTMLButtonElement;
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    currentPolygon = [];
+                    allPolygons = [];
+                    redrawCanvas();
+                    updateContextPositionDisplay();
+                });
+            }
+        }
+
+        // Store polygons data for later use
+        canvas.dataset.polygons = JSON.stringify(allPolygons);
+        canvas.dataset.currentPolygon = JSON.stringify(currentPolygon);
+        
+        // Also update the display initially
+        updateContextPositionDisplay();
     }
 
     async populateImageOptions(container: HTMLElement) {
@@ -770,6 +1054,9 @@ console.log("searchStrings", searchStrings);
                 }
             }
         });
+
+        // Populate context images (product images from main slideshow)
+        await this.populateContextImageOptions(container);
 
         // Auto-select first options if available (prioritize stored vehicle)
         if (vehicleSelect.options.length > 1) {
@@ -1031,15 +1318,88 @@ console.log("searchStrings", searchStrings);
             // Import and use compositing service
             const { CompositingService } = await import('./services/compositingService');
             
+            // Get context images if any are selected
+            const contextImages: Array<{
+                imageUrl: string;
+                polygons: Array<Array<{xPercent: number, yPercent: number}>>;
+            }> = [];
+            
+            const contextImageSelect = container.querySelector('.context-image-select') as HTMLSelectElement;
+            if (contextImageSelect && contextImageSelect.selectedOptions.length > 0) {
+                // Get all selected context images
+                const selectedOptions = Array.from(contextImageSelect.selectedOptions);
+                
+                selectedOptions.forEach((option) => {
+                    const imageUrl = option.value;
+                    if (!imageUrl) return;
+                    
+                    console.log(`Processing context image: ${imageUrl}`);
+                    
+                    // Find the canvas for this specific image
+                    const contextCanvas = container.querySelector(`.context-positioning-canvas[data-image-url="${imageUrl}"]`) as HTMLCanvasElement;
+                    console.log(`Found canvas for ${imageUrl}:`, contextCanvas);
+                    
+                    if (contextCanvas) {
+                        // Check for completed polygons
+                        let polygons: Array<Array<{x: number, y: number}>> = [];
+                        if (contextCanvas.dataset.polygons) {
+                            console.log(`Canvas dataset polygons:`, contextCanvas.dataset.polygons);
+                            polygons = JSON.parse(contextCanvas.dataset.polygons);
+                        }
+                        
+                        // Check for incomplete polygon and close it if it has enough points
+                        if (contextCanvas.dataset.currentPolygon) {
+                            const currentPolygon = JSON.parse(contextCanvas.dataset.currentPolygon);
+                            console.log(`Current incomplete polygon:`, currentPolygon);
+                            
+                            if (currentPolygon.length >= 3) {
+                                // Auto-close the incomplete polygon
+                                console.log(`Auto-closing incomplete polygon with ${currentPolygon.length} points`);
+                                polygons.push([...currentPolygon]);
+                                
+                                // Update the canvas dataset to reflect the closed polygon
+                                contextCanvas.dataset.polygons = JSON.stringify(polygons);
+                                contextCanvas.dataset.currentPolygon = JSON.stringify([]);
+                            }
+                        }
+                        
+                        if (polygons.length > 0) {
+                            // Convert canvas coordinates to percentages
+                            const contextPolygons = polygons.map((polygon: Array<{x: number, y: number}>) => 
+                                polygon.map((point: {x: number, y: number}) => ({
+                                    xPercent: Math.round((point.x / contextCanvas.width) * 100),
+                                    yPercent: Math.round((point.y / contextCanvas.height) * 100)
+                                }))
+                            );
+                            
+                            console.log(`Converted to percentages:`, contextPolygons);
+                            
+                            contextImages.push({
+                                imageUrl,
+                                polygons: contextPolygons
+                            });
+                        } else {
+                            console.log(`No polygons found for ${imageUrl}`);
+                        }
+                    } else {
+                        console.log(`No canvas found for ${imageUrl}`);
+                    }
+                });
+            }
+
             const request = {
                 sceneUrl: vehicleImageUrl,
                 productUrl: productImageUrl,
                 dropPosition: positionData, // Now sends array of points
                 sceneDescription: vehicleDescription,
-                productDescription: productDescription
+                productDescription: productDescription,
+                ...(contextImages.length > 0 && { contextImages })
             };
 
             console.log('Sending composite request from interface:', request);
+            console.log('Context images collected:', contextImages);
+            console.log('Context image select element:', contextImageSelect);
+            console.log('Selected options:', Array.from(contextImageSelect?.selectedOptions || []));
             const response = await CompositingService.generateComposite(request);
 
             // Show success

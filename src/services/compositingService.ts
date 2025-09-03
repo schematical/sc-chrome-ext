@@ -9,6 +9,13 @@ export interface CompositeImageRequest {
     }>;
     sceneDescription: string;
     productDescription: string;
+    contextImages?: Array<{
+        imageUrl: string;
+        polygons: Array<Array<{
+            xPercent: number;
+            yPercent: number;
+        }>>;
+    }>;
 }
 
 export interface CompositeImageResponse {
@@ -83,6 +90,42 @@ export class CompositingService {
 
         if (!request.productDescription || request.productDescription.trim().length === 0) {
             errors.push('Product description is required');
+        }
+
+        // Validate contextImages if provided
+        if (request.contextImages) {
+            if (!Array.isArray(request.contextImages)) {
+                errors.push('contextImages must be an array');
+            } else {
+                request.contextImages.forEach((contextImage, contextIndex) => {
+                    if (!contextImage.imageUrl || !this.isValidUrl(contextImage.imageUrl)) {
+                        errors.push(`Context image ${contextIndex + 1}: Valid image URL is required`);
+                    }
+                    
+                    if (!contextImage.polygons || !Array.isArray(contextImage.polygons)) {
+                        errors.push(`Context image ${contextIndex + 1}: Polygons must be an array`);
+                    } else {
+                        contextImage.polygons.forEach((polygon, polygonIndex) => {
+                            if (!Array.isArray(polygon) || polygon.length < 3) {
+                                errors.push(`Context image ${contextIndex + 1}, polygon ${polygonIndex + 1}: Must have at least 3 points`);
+                            } else {
+                                polygon.forEach((point, pointIndex) => {
+                                    if (typeof point.xPercent !== 'number' || 
+                                        point.xPercent < 0 || 
+                                        point.xPercent > 100) {
+                                        errors.push(`Context image ${contextIndex + 1}, polygon ${polygonIndex + 1}, point ${pointIndex + 1}: xPercent must be a number between 0 and 100`);
+                                    }
+                                    if (typeof point.yPercent !== 'number' || 
+                                        point.yPercent < 0 || 
+                                        point.yPercent > 100) {
+                                        errors.push(`Context image ${contextIndex + 1}, polygon ${polygonIndex + 1}, point ${pointIndex + 1}: yPercent must be a number between 0 and 100`);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
         }
 
         return {
