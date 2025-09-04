@@ -8,6 +8,13 @@ $(document).ready(async () => {
             console.log("Value is set");
         });
     })
+    
+    // Handle settings link
+    $('#settingsLink').on('click', (e) => {
+        e.preventDefault();
+        chrome.runtime.openOptionsPage();
+    });
+    
     chrome.storage.local.get(["replace_text"])
         .then((result) => {
             console.log("result.key", result.replace_text);

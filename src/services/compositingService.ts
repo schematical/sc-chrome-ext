@@ -1,5 +1,7 @@
 // src/services/compositingService.ts
 
+import { ConfigService } from './configService';
+
 export interface CompositeImageRequest {
     sceneUrl: string;
     productUrl: string;
@@ -31,7 +33,6 @@ export interface CompositeError {
 }
 
 export class CompositingService {
-    private static readonly API_BASE_URL = 'http://localhost:3000';
     private static readonly COMPOSITE_ENDPOINT = '/api/scene';
 
     /**
@@ -39,7 +40,8 @@ export class CompositingService {
      */
     static async isServiceAvailable(): Promise<boolean> {
         try {
-            const response = await fetch(`${this.API_BASE_URL}/health`, {
+            const apiBaseUrl = await ConfigService.getApiBaseUrl();
+            const response = await fetch(`${apiBaseUrl}/health`, {
                 method: 'GET',
                 timeout: 5000
             } as any);
@@ -154,7 +156,8 @@ export class CompositingService {
         try {
             console.log('Sending composite request:', request);
 
-            const response = await fetch(`${this.API_BASE_URL}${this.COMPOSITE_ENDPOINT}`, {
+            const apiBaseUrl = await ConfigService.getApiBaseUrl();
+            const response = await fetch(`${apiBaseUrl}${this.COMPOSITE_ENDPOINT}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -187,7 +190,8 @@ export class CompositingService {
             console.error('Error generating composite:', error);
             
             if (error instanceof TypeError && error.message.includes('fetch')) {
-                throw new Error('Unable to connect to compositing service. Make sure the service is running on localhost:3000.');
+                const apiBaseUrl = await ConfigService.getApiBaseUrl();
+                throw new Error(`Unable to connect to compositing service. Make sure the service is running on ${apiBaseUrl}.`);
             }
             
             throw error;

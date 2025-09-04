@@ -15,6 +15,7 @@
     "default_popup": "menu.html",
     "default_icon": "images/icon.png"
   },
+  "options_page": "settings.html",
   "background": {
     "service_worker": "background.js"
   },

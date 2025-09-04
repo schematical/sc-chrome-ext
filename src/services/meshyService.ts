@@ -1,5 +1,7 @@
 // src/services/meshyService.ts
 
+import { ConfigService } from './configService';
+
 export interface MeshyRequest {
     imageUrls: string[];
     texturePrompt: string;
@@ -26,7 +28,6 @@ export interface MeshyRetextureResponse {
 }
 
 export class MeshyService {
-    private static readonly API_BASE_URL = process.env.MESHY_API_URL || 'http://localhost:3000';
     private static readonly MESHY_ENDPOINT = '/api/meshy';
 
     /**
@@ -36,7 +37,8 @@ export class MeshyService {
         try {
             console.log('Sending 3D model generation request:', request);
 
-            const response = await fetch(`${this.API_BASE_URL}${this.MESHY_ENDPOINT}`, {
+            const apiBaseUrl = await ConfigService.getApiBaseUrl();
+            const response = await fetch(`${apiBaseUrl}${this.MESHY_ENDPOINT}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -113,7 +115,8 @@ export class MeshyService {
                 image_style_URL: imageStyleUrl
             };
 
-            const response = await fetch(`${this.API_BASE_URL}${this.MESHY_ENDPOINT}/tasks/${taskId}/retexture`, {
+            const apiBaseUrl = await ConfigService.getApiBaseUrl();
+            const response = await fetch(`${apiBaseUrl}${this.MESHY_ENDPOINT}/tasks/${taskId}/retexture`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

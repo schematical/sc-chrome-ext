@@ -1,5 +1,7 @@
 // src/services/meshyViewerService.ts
 
+import { ConfigService } from './configService';
+
 export interface MeshyTask {
     id: string;
     status: string;
@@ -18,7 +20,6 @@ export interface MeshyTasksResponse {
 }
 
 export class MeshyViewerService {
-    private static readonly API_BASE_URL = process.env.MESHY_API_URL || 'http://localhost:3000';
     private static readonly TASKS_ENDPOINT = '/api/meshy/tasks';
 
     /**
@@ -26,7 +27,8 @@ export class MeshyViewerService {
      */
     static async getTasks(): Promise<MeshyTask[]> {
         try {
-            const response = await fetch(`${this.API_BASE_URL}${this.TASKS_ENDPOINT}`);
+            const apiBaseUrl = await ConfigService.getApiBaseUrl();
+            const response = await fetch(`${apiBaseUrl}${this.TASKS_ENDPOINT}`);
             
             if (!response.ok) {
                 const errorText = await response.text();
@@ -57,8 +59,9 @@ export class MeshyViewerService {
     /**
      * Get the GLB download URL for a task
      */
-    static getGlbDownloadUrl(taskId: string): string {
-        return `${this.API_BASE_URL}/api/meshy/tasks/${taskId}/download/glb`;
+    static async getGlbDownloadUrl(taskId: string): Promise<string> {
+        const apiBaseUrl = await ConfigService.getApiBaseUrl();
+        return `${apiBaseUrl}/api/meshy/tasks/${taskId}/download/glb`;
     }
 
     /**

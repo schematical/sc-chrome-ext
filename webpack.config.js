@@ -11,7 +11,8 @@ const entryPoints = {
     ],
     menu:  path.resolve(__dirname, 'src', 'menu.ts'),
     background: path.resolve(__dirname, 'src', 'background.ts'),
-    'vehicle-gallery': path.resolve(__dirname, 'src', 'vehicle-gallery-react.tsx')
+    'vehicle-gallery': path.resolve(__dirname, 'src', 'vehicle-gallery-react.tsx'),
+    settings: path.resolve(__dirname, 'src', 'settings.ts')
 };
 
 module.exports = (env, argv) => {

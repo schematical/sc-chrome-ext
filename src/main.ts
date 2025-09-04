@@ -1549,7 +1549,8 @@ console.log("searchStrings", searchStrings);
 
             // Show result
             resultDiv.style.display = 'block';
-            const baseUrl = 'http://localhost:3000';
+            const { ConfigService } = await import('./services/configService');
+            const baseUrl = await ConfigService.getApiBaseUrl();
             const fullImageUrl = response.finalImageUrl.startsWith('http') ? response.finalImageUrl : `${baseUrl}${response.finalImageUrl}`;
             const fullDebugUrl = response.debugImageUrl && !response.debugImageUrl.startsWith('data:') && !response.debugImageUrl.startsWith('http') 
                 ? `${baseUrl}${response.debugImageUrl}` 
@@ -1881,7 +1882,8 @@ console.log("searchStrings", searchStrings);
 
             // Show result
             resultDiv.style.display = 'block';
-            const baseUrl = 'http://localhost:3000';
+            const { ConfigService } = await import('./services/configService');
+            const baseUrl = await ConfigService.getApiBaseUrl();
             const fullImageUrl = response.finalImageUrl.startsWith('http') ? response.finalImageUrl : `${baseUrl}${response.finalImageUrl}`;
             const fullDebugUrl = response.debugImageUrl && !response.debugImageUrl.startsWith('data:') && !response.debugImageUrl.startsWith('http') 
                 ? `${baseUrl}${response.debugImageUrl}` 
@@ -2668,7 +2670,7 @@ console.log("searchStrings", searchStrings);
             const { MeshyViewerService } = await import('./services/meshyViewerService');
             const { Meshy3DViewer } = await import('./components/meshy3DViewer');
             
-            const modelUrl = MeshyViewerService.getGlbDownloadUrl(taskId);
+            const modelUrl = await MeshyViewerService.getGlbDownloadUrl(taskId);
             const viewer = new Meshy3DViewer(viewerContainer, modelUrl);
             await viewer.createViewer();
 
