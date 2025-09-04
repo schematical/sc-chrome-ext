@@ -1094,52 +1094,38 @@ console.log("searchStrings", searchStrings);
 
     async addStoredVehicleToSelect(vehicleSelect: HTMLSelectElement) {
         try {
-            let storedVehicle = null;
+            // Use VehicleStorage instead of currentVehicle
+            const { VehicleStorage } = await import('./utils/vehicleStorage');
+            const vehicleData = await VehicleStorage.getVehicleData();
             
-            // Try to get from chrome storage first
-            if (typeof chrome !== 'undefined' && chrome.storage) {
-                const result = await chrome.storage.local.get('currentVehicle');
-                storedVehicle = result.currentVehicle;
-            } else {
-                // Fallback to localStorage
-                const stored = localStorage.getItem('currentVehicle');
-                if (stored) {
-                    storedVehicle = JSON.parse(stored);
-                }
-            }
-
-            if (storedVehicle) {
+            if (vehicleData && vehicleData.images && vehicleData.images.length > 0) {
                 // Check if vehicle was set recently (within 24 hours)
-                const hoursSinceSet = (Date.now() - storedVehicle.setAt) / (1000 * 60 * 60);
+                const hoursSinceSet = (Date.now() - vehicleData.extractedAt) / (1000 * 60 * 60);
                 if (hoursSinceSet < 24) {
                     
-                    // Handle new format with multiple images
-                    if (storedVehicle.images && Array.isArray(storedVehicle.images)) {
-                        storedVehicle.images.forEach((image: any, index: number) => {
-                            const option = document.createElement('option');
-                            option.value = image.url;
-                            option.textContent = `📋 Gallery: ${image.title || `Image ${index + 1}`}`;
-                            option.style.backgroundColor = '#e3f2fd';
-                            if (image.isMain) {
-                                option.style.fontWeight = 'bold';
-                            }
-                            
-                            // Insert stored images after the "Choose vehicle image..." option
-                            vehicleSelect.appendChild(option);
-                        });
-                        console.log('Added stored vehicle gallery images to select:', storedVehicle.images.length, 'images');
-                        
-                    } else if (storedVehicle.imageUrl) {
-                        // Handle legacy format (single image)
+                    // Add each stored vehicle image
+                    vehicleData.images.forEach((imageUrl: string, index: number) => {
                         const option = document.createElement('option');
-                        option.value = storedVehicle.imageUrl;
-                        option.textContent = `📋 Stored: ${storedVehicle.info || 'Vehicle from Gallery'}`;
-                        option.style.backgroundColor = '#e3f2fd';
-                        option.style.fontWeight = 'bold';
+                        option.value = imageUrl;
                         
+                        // Create a descriptive label
+                        let label = `📋 Gallery: Vehicle Image ${index + 1}`;
+                        if (vehicleData.info?.yearMakeModel) {
+                            label = `📋 Gallery: ${vehicleData.info.yearMakeModel} (${index + 1})`;
+                        }
+                        
+                        option.textContent = label;
+                        option.style.backgroundColor = '#e3f2fd';
+                        
+                        // Mark the first image as main if no specific main indicator
+                        if (index === 0) {
+                            option.style.fontWeight = 'bold';
+                        }
+                        
+                        // Insert stored images after the "Choose vehicle image..." option
                         vehicleSelect.appendChild(option);
-                        console.log('Added legacy stored vehicle to select:', storedVehicle);
-                    }
+                    });
+                    console.log('Added stored vehicle gallery images to select:', vehicleData.images.length, 'images');
                 }
             }
         } catch (error) {
@@ -1373,9 +1359,14 @@ console.log("searchStrings", searchStrings);
     }
 
     async handleInterfaceCompositeGeneration(container: HTMLElement) {
+        console.log('=== COMPOSITE GENERATION STARTED ===');
+        console.log('Container:', container);
+        
         const generateBtn = container.querySelector('.generate-composite-btn') as HTMLButtonElement;
         const statusDiv = container.querySelector('.composite-status') as HTMLElement;
         const resultDiv = container.querySelector('.composite-result') as HTMLElement;
+        
+        console.log('Found elements:', { generateBtn: !!generateBtn, statusDiv: !!statusDiv, resultDiv: !!resultDiv });
         
         // Prevent multiple concurrent requests
         if (generateBtn.dataset.requesting === 'true') {
@@ -1580,6 +1571,7 @@ console.log("searchStrings", searchStrings);
                                 style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">
                             📤 Share
                         </button>
+                        ${await this.getUpdate3DModelButton(fullImageUrl)}
                     </div>
                     <details style="margin-top: 8px;">
                         <summary style="cursor: pointer; font-size: 12px; color: #666; margin-bottom: 8px;">🔧 Debug Information</summary>
@@ -1593,6 +1585,18 @@ console.log("searchStrings", searchStrings);
                     </details>
                 </div>
             `;
+
+            // Add event listener for Update 3D Model button if it exists
+            const update3dBtn = resultDiv.querySelector('.update-3d-model-btn') as HTMLButtonElement;
+            if (update3dBtn) {
+                update3dBtn.addEventListener('click', async () => {
+                    const { VehicleStorage } = await import('./utils/vehicleStorage');
+                    const vehicleData = await VehicleStorage.getVehicleData();
+                    if (vehicleData?.meshyModelId) {
+                        this.handleUpdate3DModel(update3dBtn, fullImageUrl, vehicleData.meshyModelId);
+                    }
+                });
+            }
 
         } catch (error) {
             console.error('Interface composite generation error:', error);
@@ -1863,7 +1867,12 @@ console.log("searchStrings", searchStrings);
             };
 
             console.log('Sending composite request:', request);
+            console.log('About to call CompositingService.generateComposite...');
+            
             const response = await CompositingService.generateComposite(request);
+            
+            console.log('Composite generation completed successfully!');
+            console.log('Response:', response);
 
             // Show success
             statusDiv.style.background = '#d4edda';
@@ -1878,6 +1887,28 @@ console.log("searchStrings", searchStrings);
                 ? `${baseUrl}${response.debugImageUrl}` 
                 : response.debugImageUrl;
             
+            // Check if we have a meshy model ID to show the Update 3D Model button
+            const { VehicleStorage } = await import('./utils/vehicleStorage');
+            const vehicleData = await VehicleStorage.getVehicleData();
+            const hasMeshyModel = vehicleData?.meshyModelId;
+            
+            // Debug logging
+            console.log('Vehicle data for Update 3D Model button:', vehicleData);
+            console.log('Has meshy model ID:', hasMeshyModel);
+            console.log('Meshy model ID value:', vehicleData?.meshyModelId);
+            
+            const update3dButton = hasMeshyModel ? `
+                <a href="#" class="update-3d-model-btn" 
+                   style="display: inline-block; background: #9c27b0; color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; margin-left: 8px;">
+                    🎨 Update 3D Model
+                </a>
+            ` : `
+                <a href="#" class="update-3d-model-btn-disabled" 
+                   style="display: inline-block; background: #ccc; color: #666; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; margin-left: 8px; cursor: not-allowed;">
+                    🎨 Update 3D Model (No 3D Model)
+                </a>
+            `;
+
             resultDiv.innerHTML = `
                 <h5 style="margin: 0 0 8px 0; color: #333;">Generated Composite:</h5>
                 <img src="${fullImageUrl}" alt="Generated Composite" 
@@ -1887,15 +1918,21 @@ console.log("searchStrings", searchStrings);
                        style="display: inline-block; background: #007bff; color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 12px;">
                         💾 Download Image
                     </a>
+                    ${update3dButton}
                 </div>
                 <details style="margin-top: 8px;">
                     <summary style="cursor: pointer; font-size: 12px; color: #666;">Debug Info</summary>
                     <div style="margin-top: 4px; font-size: 11px; color: #999;">
                         <p><strong>Final Prompt:</strong> ${response.finalPrompt}</p>
                         ${fullDebugUrl ? `<img src="${fullDebugUrl}" alt="Debug" style="max-width: 200px; height: auto; border: 1px solid #ddd;">` : ''}
+                        <p><strong>Vehicle Data Status:</strong> ${vehicleData ? 'Found' : 'Not found'}</p>
+                        <p><strong>Meshy Model ID:</strong> ${vehicleData?.meshyModelId || 'None'}</p>
+                        <p><strong>Vehicle Images:</strong> ${vehicleData?.images?.length || 0} images</p>
                     </div>
                 </details>
             `;
+
+
 
         } catch (error) {
             console.error('Composite generation error:', error);
@@ -1925,7 +1962,7 @@ console.log("searchStrings", searchStrings);
                 </div>
                 
                 <div class="vehicle-preview" style="margin-bottom: 12px; text-align: center; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">
-                    <img class="preview-image" src="${galleryImages[0]?.fullUrl || this.getCurrentVehicleImageUrl()}" style="max-width: 100%; max-height: 120px; border-radius: 4px;" />
+                    <img class="preview-image" src="${galleryImages[0]?.fullUrl || ''}" style="max-width: 100%; max-height: 120px; border-radius: 4px;" />
                     ${galleryImages.length > 1 ? `
                         <div style="font-size: 11px; color: #666; margin-top: 4px;">
                             Main image • ${galleryImages.length} total images will be saved
@@ -1975,7 +2012,7 @@ console.log("searchStrings", searchStrings);
                 setButton.textContent = 'Setting...';
 
                 // Set the main image as the selected one (first image or current image as fallback)
-                const selectedImageUrl = galleryImages[0]?.fullUrl || this.getCurrentVehicleImageUrl();
+                const selectedImageUrl = galleryImages[0]?.fullUrl || await this.getCurrentVehicleImageUrl();
                 await this.setVehicleForCompositing(galleryImages, vehicleInfo, selectedImageUrl);
 
                 resultDiv.style.display = 'block';
@@ -2019,8 +2056,21 @@ console.log("searchStrings", searchStrings);
         }
     }
 
-    getCurrentVehicleImageUrl(): string {
-        // Try to find the main vehicle image
+    async getCurrentVehicleImageUrl(): Promise<string> {
+        try {
+            // First try to get from VehicleStorage
+            const { VehicleStorage } = await import('./utils/vehicleStorage');
+            const vehicleData = await VehicleStorage.getVehicleData();
+            
+            if (vehicleData && vehicleData.images && vehicleData.images.length > 0) {
+                // Return the first (main) image
+                return vehicleData.images[0];
+            }
+        } catch (error) {
+            console.error('Error getting vehicle image from storage:', error);
+        }
+
+        // Fallback to page detection
         const mainImage = document.querySelector('img[src*="web-compressed"]') as HTMLImageElement;
         if (mainImage) {
             return mainImage.src;
@@ -2104,11 +2154,13 @@ console.log("searchStrings", searchStrings);
 
         // If no gallery images found, fallback to current image
         if (galleryImages.length === 0) {
-            const fallbackUrl = this.getCurrentVehicleImageUrl();
-            if (fallbackUrl) {
+            // Note: This is a synchronous method, so we can't use the async version here
+            // Fallback to page detection instead
+            const mainImage = document.querySelector('img[src*="web-compressed"]') as HTMLImageElement;
+            if (mainImage) {
                 galleryImages.push({
-                    thumbUrl: fallbackUrl,
-                    fullUrl: fallbackUrl,
+                    thumbUrl: mainImage.src,
+                    fullUrl: mainImage.src,
                     isMain: true
                 });
             }
@@ -2360,6 +2412,178 @@ console.log("searchStrings", searchStrings);
         }
     }
 
+    async handleUpdate3DModel(button: HTMLButtonElement, imageUrl: string, meshyModelId: string): Promise<void> {
+        try {
+            // Disable button and show processing state
+            button.style.pointerEvents = 'none';
+            button.style.opacity = '0.6';
+            button.textContent = '⏳ Processing...';
+            button.style.background = '#ff9800';
+
+            // Convert image to base64
+            const base64Data = await this.convertImageToBase64(imageUrl);
+            
+            // Call the retexture API
+            const { MeshyService } = await import('./services/meshyService');
+            await MeshyService.retextureModel(meshyModelId, base64Data);
+
+            // Show success message
+            button.textContent = '✅ 3D Model Updated!';
+            button.style.background = '#4caf50';
+            button.style.color = 'white';
+            
+            // Show additional info about retexturing time
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = `
+                margin-top: 8px;
+                padding: 8px;
+                background: #d4edda;
+                border: 1px solid #c3e6cb;
+                border-radius: 4px;
+                color: #155724;
+                font-size: 11px;
+                text-align: center;
+            `;
+            infoDiv.innerHTML = '🎨 3D model retexturing has started. This will take a while to process.';
+            
+            // Insert after the button
+            button.parentNode?.insertBefore(infoDiv, button.nextSibling);
+
+            // Re-enable button after delay
+            setTimeout(() => {
+                button.style.pointerEvents = 'auto';
+                button.style.opacity = '1';
+                button.textContent = '🎨 Update 3D Model';
+                button.style.background = '#9c27b0';
+                button.style.color = 'white';
+                
+                // Remove info message
+                if (infoDiv.parentNode) {
+                    infoDiv.parentNode.removeChild(infoDiv);
+                }
+            }, 5000);
+
+        } catch (error) {
+            console.error('Error updating 3D model:', error);
+            
+            // Show error and re-enable button
+            button.style.pointerEvents = 'auto';
+            button.style.opacity = '1';
+            button.textContent = '❌ Update Failed';
+            button.style.background = '#f44336';
+            button.style.color = 'white';
+            
+            // Show error message
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = `
+                margin-top: 8px;
+                padding: 8px;
+                background: #f8d7da;
+                border: 1px solid #f5c6cb;
+                border-radius: 4px;
+                color: #721c24;
+                font-size: 11px;
+                text-align: center;
+            `;
+            errorDiv.innerHTML = `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`;
+            
+            // Insert after the button
+            button.parentNode?.insertBefore(errorDiv, button.nextSibling);
+            
+            // Re-enable button after delay
+            setTimeout(() => {
+                button.textContent = '🎨 Update 3D Model';
+                button.style.background = '#9c27b0';
+                button.style.color = 'white';
+                
+                // Remove error message
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+    }
+
+    async convertImageToBase64(imageUrl: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    if (!ctx) {
+                        reject(new Error('Could not get canvas context'));
+                        return;
+                    }
+                    
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Convert to base64 with JPEG format and 0.8 quality
+                    const base64 = canvas.toDataURL('image/jpeg', 0.8);
+                    resolve(base64);
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            
+            img.onerror = () => {
+                reject(new Error('Failed to load image for base64 conversion'));
+            };
+            
+            img.src = imageUrl;
+        });
+    }
+
+    async getUpdate3DModelButton(imageUrl: string): Promise<string> {
+        try {
+            // Check if we have a meshy model ID to show the Update 3D Model button
+            const { VehicleStorage } = await import('./utils/vehicleStorage');
+            const vehicleData = await VehicleStorage.getVehicleData();
+            const hasMeshyModel = vehicleData?.meshyModelId;
+            
+            // Debug logging
+            console.log('Vehicle data for Update 3D Model button:', vehicleData);
+            console.log('Has meshy model ID:', hasMeshyModel);
+            console.log('Meshy model ID value:', vehicleData?.meshyModelId);
+            
+            if (hasMeshyModel) {
+                return `
+                    <button class="update-3d-model-btn" 
+                           style="background: #9c27b0; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                        🎨 Update 3D Model
+                    </button>
+                `;
+            } else {
+                return `
+                    <button class="update-3d-model-btn-disabled" 
+                           style="background: #ccc; color: #666; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: not-allowed;" disabled>
+                        🎨 Update 3D Model (No 3D Model)
+                    </button>
+                `;
+            }
+        } catch (error) {
+            console.error('Error getting Update 3D Model button:', error);
+            
+            // Check if it's an extension context error
+            if (error instanceof Error && error.message.includes('Extension context invalidated')) {
+                return `
+                    <button class="update-3d-model-btn-error" 
+                           style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: not-allowed;" disabled>
+                        ⚠️ Extension Error - Please Reload Page
+                    </button>
+                `;
+            }
+            
+            return '';
+        }
+    }
+
 
 
     async view3DModel(taskId: string) {
@@ -2454,29 +2678,38 @@ console.log("searchStrings", searchStrings);
     }
 
     async setVehicleForCompositing(galleryImages: Array<{thumbUrl: string, fullUrl: string, isMain: boolean}>, vehicleInfo: string, selectedImageUrl?: string) {
-        // Store ALL gallery images for this vehicle in chrome.storage.local for use in compositing
-        const vehicleData = {
-            images: galleryImages.map(img => ({
-                url: img.fullUrl,
-                thumbnail: img.thumbUrl,
-                isMain: img.isMain,
-                title: `Vehicle Image ${galleryImages.indexOf(img) + 1}${img.isMain ? ' (Main)' : ''}`
-            })),
-            info: vehicleInfo,
-            selectedImageUrl: selectedImageUrl || galleryImages[0]?.fullUrl,
-            setAt: Date.now(),
-            source: 'gallery'
-        };
+        try {
+            // Clear any existing meshyModelId since we're setting a new vehicle
+            const { VehicleStorage } = await import('./utils/vehicleStorage');
+            
+            // Store ALL gallery images for this vehicle using VehicleStorage
+            const vehicleData = {
+                images: galleryImages.map(img => img.fullUrl),
+                info: {
+                    title: vehicleInfo,
+                    url: window.location.href,
+                    yearMakeModel: vehicleInfo,
+                    wheels: {},
+                    tires: {},
+                    suspension: {}
+                },
+                extractedAt: Date.now()
+            };
 
-        if (typeof chrome !== 'undefined' && chrome.storage) {
-            await chrome.storage.local.set({
-                currentVehicle: vehicleData
-            });
-            console.log('Stored vehicle with all gallery images:', vehicleData);
-        } else {
-            // Fallback to localStorage for testing
-            localStorage.setItem('currentVehicle', JSON.stringify(vehicleData));
-            console.log('Stored vehicle with all gallery images (localStorage):', vehicleData);
+            // Clear any existing meshyModelId by not including it in the new data
+            await VehicleStorage.setVehicleData(vehicleData.images, vehicleData.info);
+            
+            console.log('Stored new vehicle data (cleared meshyModelId):', vehicleData);
+            
+            // Also clear the legacy currentVehicle storage
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                await chrome.storage.local.remove('currentVehicle');
+            } else {
+                localStorage.removeItem('currentVehicle');
+            }
+            
+        } catch (error) {
+            console.error('Error setting vehicle for compositing:', error);
         }
     }
 

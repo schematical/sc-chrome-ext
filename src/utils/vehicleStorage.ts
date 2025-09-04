@@ -50,15 +50,35 @@ export class VehicleStorage {
                 extractedAt: Date.now()
             };
 
-            await chrome.storage.local.set({
-                [this.STORAGE_KEY]: vehicleData
-            });
+            // Try chrome.storage first
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                await chrome.storage.local.set({
+                    [this.STORAGE_KEY]: vehicleData
+                });
+            }
+
+            // Always store in localStorage as backup
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(vehicleData));
 
             console.log('Vehicle data stored successfully:', vehicleData);
             return true;
         } catch (error) {
             console.error('Error storing vehicle data:', error);
-            return false;
+            
+            // If chrome.storage fails, try localStorage only
+            try {
+                const vehicleData: VehicleData = {
+                    images,
+                    info: vehicleInfo,
+                    extractedAt: Date.now()
+                };
+                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(vehicleData));
+                console.log('Vehicle data stored in localStorage as fallback');
+                return true;
+            } catch (fallbackError) {
+                console.error('LocalStorage fallback also failed:', fallbackError);
+                return false;
+            }
         }
     }
 
@@ -67,10 +87,29 @@ export class VehicleStorage {
      */
     static async getVehicleData(): Promise<VehicleData | null> {
         try {
+            // Check if chrome.storage is available
+            if (typeof chrome === 'undefined' || !chrome.storage) {
+                console.warn('Chrome storage not available, falling back to localStorage');
+                const stored = localStorage.getItem(this.STORAGE_KEY);
+                return stored ? JSON.parse(stored) : null;
+            }
+
             const result = await chrome.storage.local.get([this.STORAGE_KEY]);
             return result[this.STORAGE_KEY] || null;
         } catch (error) {
             console.error('Error retrieving vehicle data:', error);
+            
+            // If it's a context invalidation error, try localStorage as fallback
+            if (error instanceof Error && error.message && error.message.includes('Extension context invalidated')) {
+                console.warn('Extension context invalidated, trying localStorage fallback');
+                try {
+                    const stored = localStorage.getItem(this.STORAGE_KEY);
+                    return stored ? JSON.parse(stored) : null;
+                } catch (fallbackError) {
+                    console.error('LocalStorage fallback also failed:', fallbackError);
+                }
+            }
+            
             return null;
         }
     }
