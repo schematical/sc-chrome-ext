@@ -12,7 +12,9 @@ const entryPoints = {
     menu:  path.resolve(__dirname, 'src', 'menu.ts'),
     background: path.resolve(__dirname, 'src', 'background.ts'),
     'vehicle-gallery': path.resolve(__dirname, 'src', 'vehicle-gallery-react.tsx'),
-    settings: path.resolve(__dirname, 'src', 'settings.ts')
+    settings: path.resolve(__dirname, 'src', 'settings.ts'),
+    customWheelOffsetWidget: path.resolve(__dirname, 'src', 'content-scripts', 'customWheelOffsetWidget.ts'),
+    debug: path.resolve(__dirname, 'src', 'debug.ts')
 };
 
 module.exports = (env, argv) => {

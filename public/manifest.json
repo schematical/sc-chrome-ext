@@ -21,19 +21,29 @@
   },
   "content_scripts": [
     {
-      "js": [
-        "main.js"
-      ],
-      "matches": [
-        "https://*.console.aws.amazon.com/*",
-        "https://www.customwheeloffset.com/*"
-      ],
+      "js": ["main.js"],
+      "matches": ["https://*.console.aws.amazon.com/*"],
+      "run_at": "document_end"
+    },
+    {
+      "js": ["main.js"],
+      "matches": ["https://www.customwheeloffset.com/*"],
+      "run_at": "document_end"
+    },
+    {
+      "js": ["customWheelOffsetWidget.js"],
+      "matches": ["https://www.customwheeloffset.com/*"],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["vehicle-gallery.html"],
+      "resources": [
+        "vehicle-gallery.html",
+        "chat-widget.html",
+        "chat-widget.js",
+        "images/SchematicalSticker.png"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

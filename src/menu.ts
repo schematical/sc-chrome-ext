@@ -14,6 +14,13 @@ $(document).ready(async () => {
         e.preventDefault();
         chrome.runtime.openOptionsPage();
     });
+
+    // Handle debug link
+    $('#debugLink').on('click', (e) => {
+        e.preventDefault();
+        const url = chrome.runtime.getURL('debug.html');
+        window.open(url, '_blank');
+    });
     
     chrome.storage.local.get(["replace_text"])
         .then((result) => {

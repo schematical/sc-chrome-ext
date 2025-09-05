@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SC Extension Debug</title>
+    <style>
+      body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; margin: 16px; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      .card { border: 1px solid #e1e5e9; border-radius: 8px; padding: 12px; margin-bottom: 12px; background:#fff; }
+      .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+      .btn { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; background:#667eea; color:#fff; font-size: 13px; }
+      .btn.secondary { background:#6c757d; }
+      .btn.danger { background:#dc3545; }
+      .kv { display:grid; grid-template-columns: 160px 1fr; gap: 8px; font-size: 13px; }
+      pre { background:#f8f9fa; padding:10px; border-radius:6px; border:1px solid #e1e5e9; overflow:auto; max-height: 40vh; }
+      .muted { color:#666; font-size:12px; }
+      a { color:#007bff; text-decoration:none; }
+    </style>
+  </head>
+  <body>
+    <h1>SC Chrome Extension — Debug</h1>
+
+    <div class="card" id="env-card">
+      <div class="kv">
+        <div>Extension ID</div><div id="ext-id" class="muted">loading…</div>
+        <div>Version</div><div id="ext-version" class="muted">loading…</div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" id="open-chat-widget">Open Chat Widget</button>
+        <button class="btn secondary" id="open-test-cwo">Open CWO Site</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button class="btn" id="refresh-storage">Refresh Storage</button>
+        <button class="btn danger" id="clear-storage">Clear Local Storage</button>
+      </div>
+      <div class="row">
+        <div class="muted">chrome.storage.local + sync</div>
+      </div>
+      <pre id="storage-dump">loading…</pre>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button class="btn" id="toggle-chat-iframe">Toggle Chat Iframe (standalone)</button>
+      </div>
+      <iframe id="chat-iframe" title="Chat Widget" style="width: 420px; height: 560px; border:1px solid #e1e5e9; border-radius:8px; display:none;"></iframe>
+    </div>
+
+    <script src="debug.js"></script>
+  </body>
+  </html>
+
