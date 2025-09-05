@@ -10,7 +10,7 @@ class CustomWheelOffsetChatWidget {
     }
 
     initializeElements() {
-        this.modeToggleBtn = document.getElementById("cwo-mode-toggle"), this.chatMode = document.getElementById("cwo-chat-mode"), this.debugMode = document.getElementById("cwo-debug-mode"), this.chatMessages = document.getElementById("cwo-chat-messages"), this.chatInput = document.getElementById("cwo-chat-input"), this.sendBtn = document.getElementById("cwo-send-btn"), this.clearBtn = document.getElementById("cwo-clear-btn"), this.debugBrand = document.getElementById("cwo-debug-brand"), this.debugSize = document.getElementById("cwo-debug-size"), this.debugFinish = document.getElementById("cwo-debug-finish"), this.debugMinPrice = document.getElementById("cwo-debug-min-price"), this.debugMaxPrice = document.getElementById("cwo-debug-max-price"), this.debugInStock = document.getElementById("cwo-debug-in-stock"), this.debugSearchBtn = document.getElementById("cwo-debug-search-btn"), this.debugOutput = document.getElementById("cwo-debug-output")
+        this.modeToggleBtn = document.getElementById("cwo-mode-toggle"), this.chatMode = document.getElementById("cwo-chat-mode"), this.debugMode = document.getElementById("cwo-debug-mode"), this.chatMessages = document.getElementById("cwo-chat-messages"), this.chatInput = document.getElementById("cwo-chat-input"), this.sendBtn = document.getElementById("cwo-send-btn"), this.clearBtn = document.getElementById("cwo-clear-btn"), this.debugSearchBtn = document.getElementById("cwo-debug-search-btn"), this.debugOutput = document.getElementById("cwo-debug-output"), this.toolSelect = document.getElementById("cwo-tool-select"), this.toolParams = document.getElementById("cwo-tool-params")
     }
 
     bindEvents() {
@@ -19,7 +19,7 @@ class CustomWheelOffsetChatWidget {
             this.switchMode(e), this.updateModeToggleLabel()
         })), this.updateModeToggleLabel()), this.sendBtn.addEventListener("click", (() => this.sendMessage())), this.chatInput.addEventListener("keypress", (e => {
             "Enter" !== e.key || e.shiftKey || (e.preventDefault(), this.sendMessage())
-        })), this.clearBtn.addEventListener("click", (() => this.clearChatHistory())), this.debugSearchBtn.addEventListener("click", (() => this.executeDebugSearch()))
+        })), this.clearBtn.addEventListener("click", (() => this.clearChatHistory())), this.initToolsUI(), this.debugSearchBtn.addEventListener("click", (() => this.executeSelectedTool()))
     }
 
     toggleWidget() {
@@ -115,66 +115,132 @@ class CustomWheelOffsetChatWidget {
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight
     }
 
-    async executeDebugSearch() {
-        this.debugSearchBtn.disabled = !0, this.debugSearchBtn.textContent = "Searching...", this.debugOutput.textContent = "Searching for wheels...";
+    async executeSelectedTool() {
+        const t = this.getSelectedTool();
+        if (!t) return;
+        const values = this.collectToolParamValues(t);
+        this.debugSearchBtn.disabled = !0, this.debugSearchBtn.textContent = "Running...", this.debugOutput.textContent = "Running tool...";
         try {
-            const e = {
-                brand: this.debugBrand.value || void 0,
-                size: this.debugSize.value || void 0,
-                finish: this.debugFinish.value || void 0,
-                minPrice: this.debugMinPrice.value ? parseInt(this.debugMinPrice.value) : void 0,
-                maxPrice: this.debugMaxPrice.value ? parseInt(this.debugMaxPrice.value) : void 0,
-                inStockOnly: this.debugInStock.checked
-            };
-            Object.keys(e).forEach((t => {
-                void 0 === e[t] && delete e[t]
-            }));
-            const t = await this.searchWheels(e);
-            this.debugOutput.textContent = JSON.stringify(t, null, 2)
+            const res = await t.run(values);
+            this.debugOutput.textContent = JSON.stringify(res, null, 2)
         } catch (e) {
-            console.error("Debug search error:", e), this.debugOutput.textContent = `Error: ${e.message}`
+            console.error("Tool run error:", e), this.debugOutput.textContent = `Error: ${e.message || e}`
         } finally {
-            this.debugSearchBtn.disabled = !1, this.debugSearchBtn.textContent = "Search Wheels"
+            this.debugSearchBtn.disabled = !1, this.debugSearchBtn.textContent = "Run"
         }
     }
 
-    async searchWheels(e = {}) {
-        return await new Promise((e => setTimeout(e, 2e3))), {
-            success: !0,
-            totalProducts: 15,
-            products: [{
-                id: "1",
-                brand: "ARKON OFF-ROAD",
-                model: "Kennedy Black Milled",
-                specifications: "22x12 -51",
-                price: "$441.75 /ea",
-                stockStatus: "In Stock",
-                imageUrl: "https://example.com/image1.jpg",
-                productUrl: "https://www.customwheeloffset.com/product/1",
-                finish: "Black",
-                boltPattern: "8x170",
-                centerBore: "125.1mm"
-            }, {
-                id: "2",
-                brand: "Anthem Off-Road",
-                model: "Raider Gunmetal Machined",
-                specifications: "17x8.5 0",
-                price: "$289.99 /ea",
-                stockStatus: "In Stock",
-                imageUrl: "https://example.com/image2.jpg",
-                productUrl: "https://www.customwheeloffset.com/product/2",
-                finish: "Gunmetal",
-                boltPattern: "6x135",
-                centerBore: "87.1mm"
-            }],
-            appliedFilters: e,
-            extractionTime: 1850,
-            errors: []
+    initToolsUI() {
+        this.tools = [
+            {
+                id: "getStoreData",
+                name: "Get Store Data",
+                description: "Extract filters, products, and pagination from the current wheels store page.",
+                params: [],
+                run: async () => await this.runGetStoreData()
+            },
+            {
+                id: "applyStoreFilters",
+                name: "Apply Store Filters",
+                description: "Navigate to /store/wheels with selected filters, then extract results.",
+                params: [
+                    { key: 'brand', label: 'Brand', type: 'string', optional: !0 },
+                    { key: 'dia', label: 'Diameter', type: 'string', optional: !0 },
+                    { key: 'width', label: 'Width', type: 'string', optional: !0 },
+                    { key: 'offset', label: 'Offset', type: 'string', optional: !0 },
+                    { key: 'bolt', label: 'Bolt', type: 'string', optional: !0 },
+                    { key: 'mat', label: 'Material', type: 'string', optional: !0 },
+                    { key: 'color', label: 'Finish', type: 'string', optional: !0 },
+                    { key: 'reviews', label: 'Min Reviews', type: 'number', optional: !0 },
+                    { key: 'page', label: 'Page', type: 'number', optional: !0 }
+                ],
+                run: async (v) => await this.runApplyStoreFilters(v)
+            }
+        ];
+
+        // Populate select
+        this.toolSelect.innerHTML = "";
+        this.tools.forEach(((t, i) => {
+            const o = document.createElement("option");
+            o.value = t.id, o.textContent = t.name, i || (o.selected = !0), this.toolSelect.appendChild(o)
+        }));
+
+        this.toolSelect.addEventListener("change", (() => this.renderToolParams(this.getSelectedTool())));
+        this.renderToolParams(this.getSelectedTool());
+        this.debugSearchBtn.textContent = "Run";
+    }
+
+    getSelectedTool() {
+        const id = this.toolSelect.value;
+        return this.tools.find((t => t.id === id));
+    }
+
+    renderToolParams(tool) {
+        this.toolParams.innerHTML = "";
+        tool.params.forEach((p => {
+            const label = document.createElement("label");
+            label.className = "cwo-debug-label";
+            label.htmlFor = `tool-param-${p.key}`;
+            label.textContent = p.label;
+            const input = document.createElement("input");
+            input.className = "cwo-debug-input";
+            input.id = `tool-param-${p.key}`;
+            input.setAttribute("data-key", p.key);
+            input.setAttribute("data-type", p.type);
+            input.type = p.type === 'number' ? 'number' : 'text';
+            this.toolParams.appendChild(label);
+            this.toolParams.appendChild(input);
+        }))
+    }
+
+    collectToolParamValues(tool) {
+        const values = {};
+        tool.params.forEach((p => {
+            const el = document.getElementById(`tool-param-${p.key}`);
+            if (!el) return;
+            const v = el.value;
+            if (v === '' && p.optional) return;
+            values[p.key] = p.type === 'number' ? (v ? Number(v) : void 0) : v;
+        }));
+        return values;
+    }
+
+    async runGetStoreData() {
+        const tab = await new Promise((resolve => chrome.tabs.query({ active: !0, currentWindow: !0 }, (t => resolve(t && t[0])))));
+        if (!tab || null == tab.id) throw new Error("No active tab");
+        return await new Promise(((resolve, reject) => {
+            chrome.tabs.sendMessage(tab.id, { type: 'CWO_GET_STORE_DATA' }, (res => {
+                if (chrome.runtime.lastError) return void reject(new Error(chrome.runtime.lastError.message));
+                if (!res) return void reject(new Error('No response from content script'));
+                res.success ? resolve(res.data) : reject(new Error(res.error || 'Unknown error'))
+            }))
+        }))
+    }
+
+    async runApplyStoreFilters(values) {
+        const tab = await new Promise((resolve => chrome.tabs.query({ active: !0, currentWindow: !0 }, (t => resolve(t && t[0])))));
+        if (!tab || null == tab.id) throw new Error("No active tab");
+        const baseUrl = new URL(tab.url || 'https://www.customwheeloffset.com/store/wheels');
+        baseUrl.pathname = '/store/wheels';
+        const keys = ['dia', 'width', 'offset', 'brand', 'color', 'mat', 'reviews', 'bolt', 'page'];
+        keys.forEach((k => baseUrl.searchParams.delete(k)));
+        for (const k of keys) {
+            const v = values[k];
+            if (void 0 !== v && null !== v && String(v).trim() !== '') baseUrl.searchParams.set(k, String(v).trim());
         }
+        await new Promise(((resolve, reject) => {
+            const listener = (updatedTabId, info) => {
+                updatedTabId === tab.id && 'complete' === info.status && (chrome.tabs.onUpdated.removeListener(listener), resolve())
+            };
+            chrome.tabs.onUpdated.addListener(listener);
+            chrome.tabs.update(tab.id, { url: baseUrl.toString() }, (() => {
+                chrome.runtime.lastError && (chrome.tabs.onUpdated.removeListener(listener), reject(new Error(chrome.runtime.lastError.message)))
+            }))
+        }));
+        return await this.runGetStoreData();
     }
 }
 
 document.addEventListener("DOMContentLoaded", (() => {
     new CustomWheelOffsetChatWidget
 }));
-

@@ -50,7 +50,20 @@
       <iframe id="chat-iframe" title="Chat Widget" style="width: 420px; height: 560px; border:1px solid #e1e5e9; border-radius:8px; display:none;"></iframe>
     </div>
 
+    <div class="card" id="tools-card">
+      <h2 style="font-size:16px;margin:0 0 8px;">Tools</h2>
+      <div class="row">
+        <label for="tool-select" class="muted" style="min-width:120px;">Select Tool</label>
+        <select id="tool-select" style="padding:6px 8px; border:1px solid #e1e5e9; border-radius:6px; min-width:260px;"></select>
+      </div>
+      <div id="tool-params" style="display:grid; grid-template-columns: 160px 1fr; gap:8px; margin-top:8px;"></div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" id="tool-run">Run</button>
+        <span class="muted" id="tool-help"></span>
+      </div>
+      <pre id="tool-output" style="margin-top:8px;">Output will appear here…</pre>
+    </div>
+
     <script src="debug.js"></script>
   </body>
   </html>
-

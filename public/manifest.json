@@ -34,6 +34,11 @@
       "js": ["customWheelOffsetWidget.js"],
       "matches": ["https://www.customwheeloffset.com/*"],
       "run_at": "document_end"
+    },
+    {
+      "js": ["customWheelOffsetStoreExtractor.js"],
+      "matches": ["https://www.customwheeloffset.com/store/*"],
+      "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [

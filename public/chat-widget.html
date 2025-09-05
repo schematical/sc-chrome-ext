@@ -94,53 +94,19 @@
         <!-- Debug Mode -->
         <div class="cwo-debug-mode" id="cwo-debug-mode">
             <div class="cwo-debug-section">
-                <h3>Search Wheels Tool</h3>
+                <h3>Tools</h3>
                 <div class="cwo-debug-controls">
                     <div class="cwo-debug-row">
-                        <label class="cwo-debug-label">Brand:</label>
-                        <select class="cwo-debug-select" id="cwo-debug-brand">
-                            <option value="">All Brands</option>
-                            <option value="ARKON OFF-ROAD">ARKON OFF-ROAD</option>
-                            <option value="Anthem Off-Road">Anthem Off-Road</option>
-                            <option value="Fuel">Fuel</option>
-                        </select>
+                        <label class="cwo-debug-label" for="cwo-tool-select">Tool:</label>
+                        <select class="cwo-debug-select" id="cwo-tool-select"></select>
                     </div>
-                    <div class="cwo-debug-row">
-                        <label class="cwo-debug-label">Size:</label>
-                        <select class="cwo-debug-select" id="cwo-debug-size">
-                            <option value="">All Sizes</option>
-                            <option value="22x12">22x12</option>
-                            <option value="17x8.5">17x8.5</option>
-                            <option value="20x10">20x10</option>
-                        </select>
-                    </div>
-                    <div class="cwo-debug-row">
-                        <label class="cwo-debug-label">Finish:</label>
-                        <select class="cwo-debug-select" id="cwo-debug-finish">
-                            <option value="">All Finishes</option>
-                            <option value="Black">Black</option>
-                            <option value="Gunmetal">Gunmetal</option>
-                            <option value="Chrome">Chrome</option>
-                        </select>
-                    </div>
-                    <div class="cwo-debug-row">
-                        <label class="cwo-debug-label">Min Price:</label>
-                        <input type="number" class="cwo-debug-input" id="cwo-debug-min-price" placeholder="0">
-                    </div>
-                    <div class="cwo-debug-row">
-                        <label class="cwo-debug-label">Max Price:</label>
-                        <input type="number" class="cwo-debug-input" id="cwo-debug-max-price" placeholder="1000">
-                    </div>
-                    <div class="cwo-debug-row">
-                        <label class="cwo-debug-label">In Stock Only:</label>
-                        <input type="checkbox" id="cwo-debug-in-stock">
-                    </div>
-                    <button class="cwo-debug-btn" id="cwo-debug-search-btn">Search Wheels</button>
+                    <div id="cwo-tool-params" style="display:grid; grid-template-columns: 110px 1fr; gap:8px;"></div>
+                    <button class="cwo-debug-btn" id="cwo-debug-search-btn">Run</button>
                 </div>
             </div>
             <div class="cwo-debug-section">
                 <h3>Output</h3>
-                <div class="cwo-debug-output" id="cwo-debug-output">Click "Search Wheels" to see results...</div>
+                <div class="cwo-debug-output" id="cwo-debug-output">Click "Run" to see results...</div>
             </div>
         </div>
     </div>

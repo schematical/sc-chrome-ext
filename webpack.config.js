@@ -14,6 +14,7 @@ const entryPoints = {
     'vehicle-gallery': path.resolve(__dirname, 'src', 'vehicle-gallery-react.tsx'),
     settings: path.resolve(__dirname, 'src', 'settings.ts'),
     customWheelOffsetWidget: path.resolve(__dirname, 'src', 'content-scripts', 'customWheelOffsetWidget.ts'),
+    customWheelOffsetStoreExtractor: path.resolve(__dirname, 'src', 'content-scripts', 'customWheelOffsetStoreExtractor.ts'),
     debug: path.resolve(__dirname, 'src', 'debug.ts')
 };
 

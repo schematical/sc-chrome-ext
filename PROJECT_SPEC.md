@@ -69,7 +69,7 @@ Data contracts
 
 ## ChatGPT Function Tool
 
-- Name: `search_wheels` — exposes the service with schema‑validated parameters.
+- Name: `search_wheels~` — exposes the service with schema‑validated parameters.
 - Use cases: auto‑invoked by Chat parsing (e.g., "black wheels under $500").
 - Returns: structured JSON for easy formatting in the chat UI.
 
