@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Wheel Offset Chat Widget</title>
+    <style>
+        html, body { height: 100%; margin: 0; }
+
+        .cwo-widget-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 100vh;
+            background: #fff;
+        }
+
+        .cwo-topbar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #e1e5e9;
+            background: #ffffff;
+        }
+
+        .cwo-mode-toggle {
+            background: #667eea;
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        /* Chat Mode */
+        .cwo-chat-mode { display: flex; flex-direction: column; height: 100%; }
+        .cwo-chat-messages { flex: 1; padding: 16px; overflow-y: auto; background: #f8f9fa; }
+        .cwo-message { margin-bottom: 12px; display: flex; flex-direction: column; }
+        .cwo-message.user { align-items: flex-end; }
+        .cwo-message.assistant { align-items: flex-start; }
+        .cwo-message-content { max-width: 80%; padding: 10px 14px; border-radius: 12px; word-wrap: break-word; }
+        .cwo-message.user .cwo-message-content { background: #667eea; color: #fff; }
+        .cwo-message.assistant .cwo-message-content { background: #fff; color: #333; border: 1px solid #e1e5e9; }
+        .cwo-message-time { font-size: 11px; color: #666; margin-top: 4px; }
+        .cwo-chat-input-container { padding: 16px; border-top: 1px solid #e1e5e9; background: white; }
+        .cwo-chat-input-wrapper { display: flex; gap: 8px; }
+        .cwo-chat-input { flex: 1; padding: 10px 12px; border: 1px solid #e1e5e9; border-radius: 8px; font-size: 14px; outline: none; }
+        .cwo-chat-input:focus { border-color: #667eea; }
+        .cwo-send-btn { background: #667eea; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+        .cwo-send-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .cwo-clear-btn { background: #dc3545; color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-top: 8px; }
+
+        /* Debug Mode */
+        .cwo-debug-mode { display: none; flex-direction: column; height: 100%; padding: 16px; overflow-y: auto; }
+        .cwo-debug-mode.active { display: flex; }
+        .cwo-debug-section { margin-bottom: 20px; }
+        .cwo-debug-controls { display: flex; flex-direction: column; gap: 12px; }
+        .cwo-debug-row { display: flex; gap: 8px; align-items: center; }
+        .cwo-debug-label { min-width: 80px; font-size: 12px; color: #666; }
+        .cwo-debug-select, .cwo-debug-input { flex: 1; padding: 6px 8px; border: 1px solid #e1e5e9; border-radius: 4px; font-size: 12px; }
+        .cwo-debug-btn { background: #28a745; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .cwo-debug-output { flex: 1; background: #f8f9fa; border: 1px solid #e1e5e9; border-radius: 6px; padding: 12px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; white-space: pre-wrap; }
+
+        .cwo-loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="cwo-widget-content" class="cwo-widget-content">
+        <div class="cwo-topbar">
+            <button class="cwo-mode-toggle" id="cwo-mode-toggle">Debug</button>
+        </div>
+        <!-- Chat Mode -->
+        <div class="cwo-chat-mode" id="cwo-chat-mode">
+            <div class="cwo-chat-messages" id="cwo-chat-messages">
+                <div class="cwo-message assistant">
+                    <div class="cwo-message-content">
+                        Hello! I'm your Custom Wheel Offset assistant. I can help you find wheels, compare prices, and answer questions about products. How can I help you today?
+                    </div>
+                    <div class="cwo-message-time" id="cwo-welcome-time"></div>
+                </div>
+            </div>
+            <div class="cwo-chat-input-container">
+                <div class="cwo-chat-input-wrapper">
+                    <input type="text" class="cwo-chat-input" id="cwo-chat-input" placeholder="Ask about wheels, prices, or specifications...">
+                    <button class="cwo-send-btn" id="cwo-send-btn">Send</button>
+                </div>
+                <button class="cwo-clear-btn" id="cwo-clear-btn">Clear Chat History</button>
+            </div>
+        </div>
+        <!-- Debug Mode -->
+        <div class="cwo-debug-mode" id="cwo-debug-mode">
+            <div class="cwo-debug-section">
+                <h3>Search Wheels Tool</h3>
+                <div class="cwo-debug-controls">
+                    <div class="cwo-debug-row">
+                        <label class="cwo-debug-label">Brand:</label>
+                        <select class="cwo-debug-select" id="cwo-debug-brand">
+                            <option value="">All Brands</option>
+                            <option value="ARKON OFF-ROAD">ARKON OFF-ROAD</option>
+                            <option value="Anthem Off-Road">Anthem Off-Road</option>
+                            <option value="Fuel">Fuel</option>
+                        </select>
+                    </div>
+                    <div class="cwo-debug-row">
+                        <label class="cwo-debug-label">Size:</label>
+                        <select class="cwo-debug-select" id="cwo-debug-size">
+                            <option value="">All Sizes</option>
+                            <option value="22x12">22x12</option>
+                            <option value="17x8.5">17x8.5</option>
+                            <option value="20x10">20x10</option>
+                        </select>
+                    </div>
+                    <div class="cwo-debug-row">
+                        <label class="cwo-debug-label">Finish:</label>
+                        <select class="cwo-debug-select" id="cwo-debug-finish">
+                            <option value="">All Finishes</option>
+                            <option value="Black">Black</option>
+                            <option value="Gunmetal">Gunmetal</option>
+                            <option value="Chrome">Chrome</option>
+                        </select>
+                    </div>
+                    <div class="cwo-debug-row">
+                        <label class="cwo-debug-label">Min Price:</label>
+                        <input type="number" class="cwo-debug-input" id="cwo-debug-min-price" placeholder="0">
+                    </div>
+                    <div class="cwo-debug-row">
+                        <label class="cwo-debug-label">Max Price:</label>
+                        <input type="number" class="cwo-debug-input" id="cwo-debug-max-price" placeholder="1000">
+                    </div>
+                    <div class="cwo-debug-row">
+                        <label class="cwo-debug-label">In Stock Only:</label>
+                        <input type="checkbox" id="cwo-debug-in-stock">
+                    </div>
+                    <button class="cwo-debug-btn" id="cwo-debug-search-btn">Search Wheels</button>
+                </div>
+            </div>
+            <div class="cwo-debug-section">
+                <h3>Output</h3>
+                <div class="cwo-debug-output" id="cwo-debug-output">Click "Search Wheels" to see results...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="chat-widget.js"></script>
+</body>
+</html>

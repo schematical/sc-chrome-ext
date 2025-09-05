@@ -76,6 +76,7 @@ chrome-extension/
 
 ### Key Principles
 
+- DO NOT MOCK IN FAKE DATA OR OTHERWISE MISS LEAD THE USER.
 - Write clear, modular TypeScript code with proper type definitions
 - Follow functional programming patterns; avoid classes unless necessary
 - Use descriptive variable names (e.g., `isLoading`, `hasPermission`)

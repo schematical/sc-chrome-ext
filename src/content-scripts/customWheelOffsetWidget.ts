@@ -182,8 +182,8 @@ function ensureIframe(): HTMLIFrameElement {
     height: '520px',
     maxHeight: '70vh',
     border: '0',
-    borderRadius: '10px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+    borderRadius: '0',
+    boxShadow: 'none',
     display: 'none',
     zIndex: String(Z_INDEX),
   });
