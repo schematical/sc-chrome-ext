@@ -380,7 +380,7 @@ export class MetadataExtractor {
         const parts: string[] = [];
 
         if (metadata.type === 'wheel') {
-            parts.push('This is a wheel/rim');
+            parts.push('This is a wheel(AKA rim) for a vehicle ');
         } else if (metadata.type === 'tire') {
             parts.push('This is a tire');
         } else {

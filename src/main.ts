@@ -1460,8 +1460,8 @@ console.log("searchStrings", searchStrings);
             
             // Get context images if any are selected
             const contextImages: Array<{
-                imageUrl: string;
-                polygons: Array<Array<{xPercent: number, yPercent: number}>>;
+                url: string;
+                points: Array<Array<{xPercent: number, yPercent: number}>>;
             }> = [];
             
             const contextImageSelect = container.querySelector('.context-image-select') as HTMLSelectElement;
@@ -1515,8 +1515,8 @@ console.log("searchStrings", searchStrings);
                             console.log(`Converted to percentages:`, contextPolygons);
                             
                             contextImages.push({
-                                imageUrl,
-                                polygons: contextPolygons
+                                url: imageUrl,
+                                points: contextPolygons
                             });
                         } else {
                             console.log(`No polygons found for ${imageUrl}`);

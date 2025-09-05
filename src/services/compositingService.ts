@@ -12,8 +12,8 @@ export interface CompositeImageRequest {
     sceneDescription: string;
     productDescription: string;
     contextImages?: Array<{
-        imageUrl: string;
-        polygons: Array<Array<{
+        url: string;
+        points: Array<Array<{
             xPercent: number;
             yPercent: number;
         }>>;
@@ -107,14 +107,14 @@ export class CompositingService {
                 errors.push('contextImages must be an array');
             } else {
                 request.contextImages.forEach((contextImage, contextIndex) => {
-                    if (!contextImage.imageUrl || !this.isValidUrl(contextImage.imageUrl)) {
+                    if (!contextImage.url || !this.isValidUrl(contextImage.url)) {
                         errors.push(`Context image ${contextIndex + 1}: Valid image URL is required`);
                     }
                     
-                    if (!contextImage.polygons || !Array.isArray(contextImage.polygons)) {
+                    if (!contextImage.points || !Array.isArray(contextImage.points)) {
                         errors.push(`Context image ${contextIndex + 1}: Polygons must be an array`);
                     } else {
-                                                 contextImage.polygons.forEach((polygon, polygonIndex) => {
+                                                 contextImage.points.forEach((polygon, polygonIndex) => {
                              if (!Array.isArray(polygon) || polygon.length === 0) {
                                  errors.push(`Context image ${contextIndex + 1}, polygon ${polygonIndex + 1}: Must have at least 1 point`);
                              } else {
@@ -245,6 +245,7 @@ export class CompositingService {
                 if (productMetadata.description) {
                     productDescription = productMetadata.description;
                 }
+                productDescription += ". Make this product really pop against the background. "
             }
             
             // Fallback to stored vehicle data if page metadata is incomplete
