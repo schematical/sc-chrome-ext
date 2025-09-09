@@ -15,6 +15,7 @@ const entryPoints = {
     settings: path.resolve(__dirname, 'src', 'settings.ts'),
     customWheelOffsetWidget: path.resolve(__dirname, 'src', 'content-scripts', 'customWheelOffsetWidget.ts'),
     customWheelOffsetStoreExtractor: path.resolve(__dirname, 'src', 'content-scripts', 'customWheelOffsetStoreExtractor.ts'),
+    'chat-widget': path.resolve(__dirname, 'src', 'chat-widget.ts'),
     debug: path.resolve(__dirname, 'src', 'debug.ts')
 };
 

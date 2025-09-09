@@ -4,6 +4,8 @@ import { ConfigService } from './services/configService';
 
 class SettingsPage {
     private apiBaseUrlInput!: HTMLInputElement;
+    private openaiApiKeyInput!: HTMLInputElement;
+    private openaiModelSelect!: HTMLSelectElement;
     private statusDiv!: HTMLDivElement;
     private form!: HTMLFormElement;
     private resetBtn!: HTMLButtonElement;
@@ -15,6 +17,8 @@ class SettingsPage {
 
     private init(): void {
         this.apiBaseUrlInput = document.getElementById('apiBaseUrl') as HTMLInputElement;
+        this.openaiApiKeyInput = document.getElementById('openaiApiKey') as HTMLInputElement;
+        this.openaiModelSelect = document.getElementById('openaiModel') as HTMLSelectElement;
         this.statusDiv = document.getElementById('status') as HTMLDivElement;
         this.form = document.getElementById('settingsForm') as HTMLFormElement;
         this.resetBtn = document.getElementById('resetBtn') as HTMLButtonElement;
@@ -34,6 +38,8 @@ class SettingsPage {
         try {
             const config = await ConfigService.getConfig();
             this.apiBaseUrlInput.value = config.apiBaseUrl;
+            this.openaiApiKeyInput.value = config.openaiApiKey || '';
+            this.openaiModelSelect.value = config.openaiModel || 'gpt-4o-mini';
         } catch (error) {
             console.error('Failed to load settings:', error);
             this.showStatus('Failed to load current settings', 'error');
@@ -44,6 +50,8 @@ class SettingsPage {
         e.preventDefault();
         
         const apiBaseUrl = this.apiBaseUrlInput.value.trim();
+        const openaiApiKey = this.openaiApiKeyInput.value.trim();
+        const openaiModel = this.openaiModelSelect.value.trim();
         
         if (!apiBaseUrl) {
             this.showStatus('API Base URL is required', 'error');
@@ -51,7 +59,7 @@ class SettingsPage {
         }
 
         try {
-            await ConfigService.updateConfig({ apiBaseUrl });
+            await ConfigService.updateConfig({ apiBaseUrl, openaiApiKey, openaiModel });
             this.showStatus('Settings saved successfully!', 'success');
         } catch (error) {
             console.error('Failed to save settings:', error);

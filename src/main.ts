@@ -397,14 +397,17 @@ console.log("searchStrings", searchStrings);
             return;
         }
 
+        const DEBUG_COMPOSITING_LOGS = false;
+        const dbg = (...args: any[]) => { if (DEBUG_COMPOSITING_LOGS) { try { console.log('[CompositingUI]', ...args); } catch {} } };
+
         // Find the specific injection point: after main-slider-container, before nav-slider
         const mainSliderContainer = document.getElementById('main-slider-container');
         const navSlider = document.getElementById('nav-slider');
         
         if (!mainSliderContainer || !navSlider) {
-            console.log('Required slider elements not found for compositing UI injection');
-            console.log('main-slider-container found:', !!mainSliderContainer);
-            console.log('nav-slider found:', !!navSlider);
+            dbg('Required slider elements not found for compositing UI injection');
+            dbg('main-slider-container found:', !!mainSliderContainer);
+            dbg('nav-slider found:', !!navSlider);
             return;
         }
 

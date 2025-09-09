@@ -9,6 +9,8 @@
 
 type Nullable<T> = T | null;
 
+const DEBUG_WIDGET_LOGS = false;
+
 const WIDGET_IDS = {
   launcher: 'cwo-chat-launcher',
   frame: 'cwo-chat-iframe',
@@ -25,6 +27,7 @@ function createStyles(el: HTMLElement, styles: Partial<CSSStyleDeclaration>) {
 }
 
 function log(...args: any[]) {
+  if (!DEBUG_WIDGET_LOGS) return;
   // prefix logs to find easily in console
   // eslint-disable-next-line no-console
   console.log('[CWO Widget]', ...args);
@@ -178,8 +181,8 @@ function ensureIframe(): HTMLIFrameElement {
     position: 'fixed',
     bottom: '76px',
     right: '16px',
-    width: '360px',
-    height: '520px',
+    width: '540px',
+    height: '780px',
     maxHeight: '70vh',
     border: '0',
     borderRadius: '0',
@@ -191,6 +194,9 @@ function ensureIframe(): HTMLIFrameElement {
   frame.addEventListener('load', () => log('Widget iframe loaded'));
   frame.addEventListener('error', () => log('Widget iframe load error (CSP?)'));
   document.body.appendChild(frame);
+  // Open by default
+  frame.style.display = 'block';
+  frame.setAttribute('aria-hidden', 'false');
   return frame;
 }
 
@@ -213,6 +219,9 @@ function init() {
       observeDynamicWidgets();
       const launcher = ensureLauncher();
       ensureIframe();
+
+      // Open widget by default on page load
+      try { toggleWidget(true); } catch {}
 
       launcher.addEventListener('click', () => toggleWidget());
 

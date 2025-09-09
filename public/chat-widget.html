@@ -14,6 +14,9 @@
             overflow: hidden;
             height: 100vh;
             background: #fff;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
         }
 
         .cwo-topbar {
@@ -51,6 +54,7 @@
         .cwo-chat-input:focus { border-color: #667eea; }
         .cwo-send-btn { background: #667eea; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; }
         .cwo-send-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .cwo-note { font-size: 11px; color: #666; margin-top: 6px; }
         .cwo-clear-btn { background: #dc3545; color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-top: 8px; }
 
         /* Debug Mode */
@@ -88,6 +92,7 @@
                     <input type="text" class="cwo-chat-input" id="cwo-chat-input" placeholder="Ask about wheels, prices, or specifications...">
                     <button class="cwo-send-btn" id="cwo-send-btn">Send</button>
                 </div>
+                <div class="cwo-note">Tip: Configure your OpenAI API Key in Settings to enable tool-using chat.</div>
                 <button class="cwo-clear-btn" id="cwo-clear-btn">Clear Chat History</button>
             </div>
         </div>
@@ -114,3 +119,4 @@
     <script src="chat-widget.js"></script>
 </body>
 </html>
+

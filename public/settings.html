@@ -116,6 +116,27 @@
                     This should include the protocol (http:// or https://) and domain.
                 </div>
             </div>
+
+            <div class="form-group">
+                <label for="openaiApiKey">OpenAI API Key:</label>
+                <input type="password" id="openaiApiKey" name="openaiApiKey" placeholder="sk-...">
+                <div class="help-text">
+                    Stored locally via chrome.storage. Used by the chat to call tools via function calling.
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="openaiModel">OpenAI Model:</label>
+                <select id="openaiModel" name="openaiModel">
+                    <option value="gpt-4o-mini">gpt-4o-mini</option>
+                    <option value="gpt-4o">gpt-4o</option>
+                    <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                    <option value="gpt-4.1">gpt-4.1</option>
+                </select>
+                <div class="help-text">
+                    Choose the model for tool-enabled chat.
+                </div>
+            </div>
             
             <div class="button-group">
                 <button type="submit" class="btn-primary">💾 Save Settings</button>

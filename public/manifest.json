@@ -11,6 +11,9 @@
     "contextMenus",
     "notifications"
   ],
+  "host_permissions": [
+    "https://api.openai.com/*"
+  ],
   "action": {
     "default_popup": "menu.html",
     "default_icon": "images/icon.png"

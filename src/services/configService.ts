@@ -2,12 +2,16 @@
 
 export interface ExtensionConfig {
     apiBaseUrl: string;
+    openaiApiKey?: string;
+    openaiModel?: string;
 }
 
 export class ConfigService {
     private static readonly STORAGE_KEY = 'extensionConfig';
     private static readonly DEFAULT_CONFIG: ExtensionConfig = {
-        apiBaseUrl: 'https://dev.schematical.com'
+        apiBaseUrl: 'https://dev.schematical.com',
+        openaiApiKey: '',
+        openaiModel: 'gpt-4o-mini'
     };
 
     /**
@@ -55,6 +59,14 @@ export class ConfigService {
     static async getApiBaseUrl(): Promise<string> {
         const config = await this.getConfig();
         return config.apiBaseUrl;
+    }
+
+    static async getOpenAI(): Promise<{ apiKey: string; model: string } | null> {
+        const config = await this.getConfig();
+        const apiKey = (config.openaiApiKey || '').trim();
+        const model = (config.openaiModel || 'gpt-4o-mini').trim();
+        if (!apiKey) return null;
+        return { apiKey, model };
     }
 
     /**

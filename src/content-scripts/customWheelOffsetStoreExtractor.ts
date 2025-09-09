@@ -51,6 +51,11 @@ type StoreData = {
 };
 
 const PARAM_LABELS: Record<string, string> = {
+  year: 'Year',
+  make: 'Make',
+  model: 'Model',
+  trim: 'Trim',
+  drive: 'Drive',
   dia: 'Wheel Diameter',
   width: 'Wheel Width',
   offset: 'Wheel Offset',
@@ -59,6 +64,16 @@ const PARAM_LABELS: Record<string, string> = {
   color: 'Finish',
   reviews: 'Avg. Customer Review',
   bolt: 'Bolt Pattern',
+  price: 'Price',
+  weight: 'Weight',
+  min: 'Price Min',
+  max: 'Price Max',
+  minWeight: 'Weight Min',
+  maxWeight: 'Weight Max',
+  price_min: 'Price Min',
+  price_max: 'Price Max',
+  weight_min: 'Weight Min',
+  weight_max: 'Weight Max',
 };
 
 const KNOWN_PARAMS = new Set(Object.keys(PARAM_LABELS));
@@ -110,7 +125,7 @@ function extractFiltersFromLinks(): FilterGroup[] {
   }
 
   // Order groups in a useful order
-  const order = ['brand', 'dia', 'width', 'offset', 'bolt', 'mat', 'color', 'reviews'];
+  const order = ['year', 'make', 'model', 'trim', 'drive', 'brand', 'dia', 'width', 'offset', 'bolt', 'mat', 'color', 'reviews', 'price', 'weight'];
   return Array.from(groups.values()).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 }
 
@@ -271,4 +286,3 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
 // Ensure treated as a module
 export {};
-
