@@ -1398,48 +1398,36 @@ console.log("searchStrings", searchStrings);
             const vehicleCanvas = container.querySelector('.vehicle-positioning-canvas') as HTMLCanvasElement;
             const currentPoints = JSON.parse(vehicleCanvas?.dataset.points || '[]');
             const completedPolygons = JSON.parse(vehicleCanvas?.dataset.completedPolygons || '[]');
-            const mode = (container.querySelector('.position-mode-radio:checked') as HTMLInputElement)?.value || 'point';
-            
-            let positionData: Array<Array<{xPercent: number, yPercent: number}>> = [];
-            
-            if (mode === 'point') {
-                // For point mode, create separate polygons for each point
-                if (currentPoints.length === 0) {
-                    throw new Error('Please click on the vehicle image to set product position');
-                }
-                positionData = currentPoints.map((point: any) => [{
+
+            // Always require polygons. Compose polygons from completed + current(>=3).
+            let polygonsPx: Array<Array<{ x: number; y: number }>> = [];
+            if (Array.isArray(completedPolygons) && completedPolygons.length) {
+                polygonsPx.push(...completedPolygons.filter((p: any[]) => Array.isArray(p) && p.length >= 3));
+            }
+            if (Array.isArray(currentPoints) && currentPoints.length >= 3) {
+                polygonsPx.push([...currentPoints]);
+            }
+
+            // Convert to percentage
+            let positionData: Array<Array<{ xPercent: number; yPercent: number }>> = polygonsPx.map((polygon) =>
+                polygon.map((point: any) => ({
                     xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
-                    yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
-                }]); // Each point becomes its own polygon
-            } else {
-                // For polygon mode, combine completed polygons with current points if they form a complete polygon
-                let allPolygons: Array<Array<{xPercent: number, yPercent: number}>> = [];
-                
-                // Add completed polygons
-                completedPolygons.forEach((polygon: any[]) => {
-                    if (polygon.length >= 3) {
-                        const percentagePolygon = polygon.map((point: any) => ({
-                            xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
-                            yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
-                        }));
-                        allPolygons.push(percentagePolygon);
+                    yPercent: Math.round((point.y / vehicleCanvas.height) * 100),
+                }))
+            );
+
+            // If none on-canvas, try stored per-image polygons; otherwise block generation
+            if (!positionData.length) {
+                try {
+                    const { VehicleStorage } = await import('./utils/vehicleStorage');
+                    const stored = await VehicleStorage.getWheelPolygonsForImage(vehicleImageUrl);
+                    if (stored && stored.length) {
+                        positionData = stored;
                     }
-                });
-                
-                // Add current points if they form a complete polygon
-                if (currentPoints.length >= 3) {
-                    const currentPolygon = currentPoints.map((point: any) => ({
-                        xPercent: Math.round((point.x / vehicleCanvas.width) * 100),
-                        yPercent: Math.round((point.y / vehicleCanvas.height) * 100)
-                    }));
-                    allPolygons.push(currentPolygon);
-                }
-                
-                if (allPolygons.length === 0) {
-                    throw new Error('Please create at least one complete polygon on the vehicle image');
-                }
-                
-                positionData = allPolygons; // Keep as array of polygons
+                } catch {}
+            }
+            if (!positionData.length) {
+                throw new Error('No wheel polygons found for this image. Please outline the wheel(s) first.');
             }
 
             const vehicleDescription = vehicleTextarea.value.trim();
@@ -1543,6 +1531,14 @@ console.log("searchStrings", searchStrings);
             console.log('Context images collected:', contextImages);
             console.log('Context image select element:', contextImageSelect);
             console.log('Selected options:', Array.from(contextImageSelect?.selectedOptions || []));
+
+            // Persist polygons for reuse (per vehicle image URL)
+            try {
+                const { VehicleStorage } = await import('./utils/vehicleStorage');
+                await VehicleStorage.saveWheelPolygonsForImage(vehicleImageUrl, positionData);
+            } catch (e) {
+                console.warn('Failed to persist wheel polygons:', e);
+            }
             const response = await CompositingService.generateComposite(request);
 
             // Show success
@@ -2010,18 +2006,16 @@ console.log("searchStrings", searchStrings);
         const setButton = container.querySelector('.set-vehicle-button') as HTMLButtonElement;
         const resultDiv = container.querySelector('.set-vehicle-result') as HTMLDivElement;
 
-        // Handle Set Vehicle button click
+        // Handle Set Vehicle button click — prompt for polygons per image
         setButton.addEventListener('click', async () => {
             try {
                 setButton.disabled = true;
-                setButton.textContent = 'Setting...';
+                setButton.textContent = 'Preparing...';
 
-                // Set the main image as the selected one (first image or current image as fallback)
-                const selectedImageUrl = galleryImages[0]?.fullUrl || await this.getCurrentVehicleImageUrl();
-                await this.setVehicleForCompositing(galleryImages, vehicleInfo, selectedImageUrl);
+                await this.openWheelPolygonWizardThenSetVehicle(galleryImages, vehicleInfo);
 
                 resultDiv.style.display = 'block';
-                resultDiv.textContent = `✅ Vehicle set with ${galleryImages.length} image${galleryImages.length > 1 ? 's' : ''}!`;
+                resultDiv.textContent = `✅ Vehicle set and polygons saved for ${galleryImages.length} image${galleryImages.length > 1 ? 's' : ''}!`;
                 setButton.textContent = '✓ Vehicle Set';
                 setButton.style.background = '#4caf50';
 
@@ -2718,6 +2712,187 @@ console.log("searchStrings", searchStrings);
         }
     }
 
+    // Wizard to collect wheel polygons per gallery image, then set vehicle
+    async openWheelPolygonWizardThenSetVehicle(
+        galleryImages: Array<{ thumbUrl: string; fullUrl: string; isMain: boolean }>,
+        vehicleInfo: string
+    ) {
+        return new Promise<void>(async (resolve) => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
+            const modal = document.createElement('div');
+            modal.style.cssText = 'width: min(920px, 96vw); max-height: 92vh; overflow:auto; background:#fff; border-radius:8px; box-shadow:0 10px 30px rgba(0,0,0,0.3); padding:16px;';
+            modal.innerHTML = `
+                <h3 style="margin:0 0 8px 0;">Set Vehicle • Outline Wheel Polygons</h3>
+                <p style="margin:0 0 12px 0; color:#555;">For each vehicle image, click to add polygon points around the wheel area. Click the first point to close the polygon. You can save none, one, or multiple polygons per image.</p>
+                <div class="wizard-stage" style="display:flex; gap:16px; align-items:flex-start;">
+                  <div style="flex:1; text-align:center; background:#f8f9fa; border:1px solid #e5e7eb; border-radius:6px; padding:8px;">
+                    <div class="wiz-canvas-container" style="position: relative; display: inline-block;">
+                      <img class="wiz-img" style="max-width:100%; max-height:420px; display:block; margin:0 auto; border-radius:4px;" />
+                      <canvas class="wiz-canvas" style="position:absolute; top:0; left:0; z-index:1000; cursor:crosshair;"></canvas>
+                    </div>
+                    <div class="wiz-info" style="font-size:12px; color:#666; margin-top:8px;"></div>
+                  </div>
+                  <div style="width:220px;">
+                    <div style="font-size:12px; color:#333; margin-bottom:6px;">Image <span class="wiz-index"></span> / ${galleryImages.length}</div>
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                      <button class="wiz-clear" style="background:#dc3545;color:#fff;border:none;padding:8px;border-radius:4px;cursor:pointer;">🗑️ Clear</button>
+                      <button class="wiz-save" style="background:#0d6efd;color:#fff;border:none;padding:8px;border-radius:4px;cursor:pointer;">💾 Save Polygons</button>
+                      <button class="wiz-prev" style="background:#6c757d;color:#fff;border:none;padding:8px;border-radius:4px;cursor:pointer;">← Prev</button>
+                      <button class="wiz-next" style="background:#6c757d;color:#fff;border:none;padding:8px;border-radius:4px;cursor:pointer;">Next →</button>
+                      <button class="wiz-done" style="background:#198754;color:#fff;border:none;padding:10px;border-radius:6px;cursor:pointer; margin-top:8px;">✓ Done</button>
+                    </div>
+                  </div>
+                </div>
+            `;
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            const imgEl = modal.querySelector('.wiz-img') as HTMLImageElement;
+            const canvas = modal.querySelector('.wiz-canvas') as HTMLCanvasElement;
+            const info = modal.querySelector('.wiz-info') as HTMLDivElement;
+            const idxEl = modal.querySelector('.wiz-index') as HTMLSpanElement;
+            const btnClear = modal.querySelector('.wiz-clear') as HTMLButtonElement;
+            const btnSave = modal.querySelector('.wiz-save') as HTMLButtonElement;
+            const btnPrev = modal.querySelector('.wiz-prev') as HTMLButtonElement;
+            const btnNext = modal.querySelector('.wiz-next') as HTMLButtonElement;
+            const btnDone = modal.querySelector('.wiz-done') as HTMLButtonElement;
+            // Inject Next Polygon button (kept separate from image Next)
+            const btnNextPoly = document.createElement('button');
+            btnNextPoly.className = 'wiz-next-poly';
+            btnNextPoly.textContent = '🔷 Next Polygon';
+            btnNextPoly.style.cssText = 'background:#17a2b8;color:#fff;border:none;padding:8px;border-radius:4px;cursor:pointer; margin-bottom:4px;';
+            // Insert at top of right-hand controls
+            const controlsCol = btnClear.parentElement as HTMLElement;
+            if (controlsCol) controlsCol.insertBefore(btnNextPoly, btnClear);
+
+            let index = 0;
+            let current: Array<{ x: number; y: number }> = [];
+            let polys: Array<Array<{ x: number; y: number }>> = [];
+
+            const draw = () => {
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Draw saved polygons (blue)
+                ctx.strokeStyle = '#0066cc';
+                ctx.fillStyle = '#0066cc';
+                ctx.lineWidth = 2;
+                polys.forEach(poly => {
+                    if (poly.length >= 3) {
+                        ctx.beginPath();
+                        ctx.moveTo(poly[0].x, poly[0].y);
+                        for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+                        ctx.closePath();
+                        ctx.stroke();
+                        poly.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill(); });
+                    }
+                });
+                // Draw current polygon (red)
+                if (current.length) {
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.fillStyle = '#ff0000';
+                    ctx.lineWidth = 2;
+                    for (let i = 0; i < current.length; i++) {
+                        const p = current[i];
+                        ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
+                        if (i > 0) { ctx.beginPath(); ctx.moveTo(current[i-1].x, current[i-1].y); ctx.lineTo(p.x, p.y); ctx.stroke(); }
+                    }
+                    if (current.length > 2) { ctx.beginPath(); ctx.moveTo(current[0].x, current[0].y); ctx.lineTo(current[current.length-1].x, current[current.length-1].y); ctx.stroke(); }
+                }
+                info.textContent = `Polygons: ${polys.length} • Current points: ${current.length}`;
+            };
+
+            const loadIndex = async (i: number) => {
+                const item = galleryImages[i];
+                if (!item) return;
+                idxEl.textContent = `${i + 1}`;
+                imgEl.src = item.fullUrl;
+                await new Promise<void>(res => { if (imgEl.complete) return res(); imgEl.onload = () => res(); });
+                canvas.width = imgEl.clientWidth; canvas.height = imgEl.clientHeight;
+                canvas.style.width = `${imgEl.clientWidth}px`;
+                canvas.style.height = `${imgEl.clientHeight}px`;
+                // Load stored polygons for this image (percent → px)
+                try {
+                    const { VehicleStorage } = await import('./utils/vehicleStorage');
+                    const stored = await VehicleStorage.getWheelPolygonsForImage(item.fullUrl);
+                    polys = (stored || []).map(poly => poly.map(pt => ({
+                        x: Math.round((pt.xPercent / 100) * canvas.width),
+                        y: Math.round((pt.yPercent / 100) * canvas.height),
+                    })));
+                } catch { polys = []; }
+                current = [];
+                draw();
+            };
+
+            const saveForIndex = async (i: number) => {
+                const item = galleryImages[i];
+                if (!item) return;
+                // If current polygon is complete, include it
+                let toSave = polys.slice();
+                if (current.length >= 3) toSave = [...toSave, [...current]];
+                const perc = toSave.map(poly => poly.map(p => ({
+                    xPercent: Math.round((p.x / canvas.width) * 100),
+                    yPercent: Math.round((p.y / canvas.height) * 100),
+                })));
+                try {
+                    const { VehicleStorage } = await import('./utils/vehicleStorage');
+                    await VehicleStorage.saveWheelPolygonsForImage(item.fullUrl, perc);
+                } catch {}
+            };
+
+            canvas.addEventListener('click', (e) => {
+                const r = canvas.getBoundingClientRect();
+                const x = e.clientX - r.left; const y = e.clientY - r.top;
+                if (current.length === 0) {
+                    current = [{ x, y }];
+                } else {
+                    const first = current[0];
+                    const dist = Math.hypot(x - first.x, y - first.y);
+                    if (dist < 10 && current.length >= 3) {
+                        polys.push([...current]);
+                        current = [];
+                    } else {
+                        current.push({ x, y });
+                    }
+                }
+                draw();
+            });
+
+            // Explicit Next Polygon handler (closes current polygon if valid and starts a new one)
+            btnNextPoly.onclick = () => {
+                if (current.length >= 3) {
+                    polys.push([...current]);
+                    current = [];
+                    draw();
+                    btnNextPoly.textContent = 'Added ✓';
+                    setTimeout(() => (btnNextPoly.textContent = '🔷 Next Polygon'), 700);
+                }
+            };
+
+            btnClear.onclick = () => { current = []; polys = []; draw(); };
+            btnPrev.onclick = async () => { await saveForIndex(index); index = Math.max(0, index - 1); await loadIndex(index); };
+            btnNext.onclick = async () => { await saveForIndex(index); index = Math.min(galleryImages.length - 1, index + 1); await loadIndex(index); };
+            btnSave.onclick = async () => {
+                // Include current polygon if complete
+                if (current.length >= 3) { polys.push([...current]); current = []; }
+                await saveForIndex(index);
+                btnSave.textContent = 'Saved ✓';
+                setTimeout(() => (btnSave.textContent = '💾 Save Polygons'), 800);
+                draw();
+            };
+            btnDone.onclick = async () => {
+                // Save current image polygons before finishing and persist vehicle
+                await saveForIndex(index);
+                await this.setVehicleForCompositing(galleryImages, vehicleInfo, galleryImages[0]?.fullUrl);
+                document.body.removeChild(overlay);
+                resolve();
+            };
+
+            await loadIndex(index);
+        });
+    }
+
     updateImagePreviews(container: HTMLElement) {
         const vehicleSelect = container.querySelector('.vehicle-image-select') as HTMLSelectElement;
         const productSelect = container.querySelector('.product-image-select') as HTMLSelectElement;
@@ -2817,7 +2992,8 @@ console.log("searchStrings", searchStrings);
             vehicleCanvas.style.position = 'absolute';
             vehicleCanvas.style.top = '0';
             vehicleCanvas.style.left = '0';
-            vehicleCanvas.style.zIndex = '10';
+            vehicleCanvas.style.zIndex = '1000';
+            (vehicleCanvas.style as any).pointerEvents = 'auto';
             vehicleCanvas.style.display = 'block';
 
             // Store image dimensions for coordinate calculation
@@ -2832,8 +3008,26 @@ console.log("searchStrings", searchStrings);
             // Add click handler
             this.setupVehicleCanvasClickHandler(container, vehicleCanvas);
             
-            // Update display to show any existing points
-            this.updateVehiclePositionDisplay(container, vehicleCanvas);
+            // Attempt to auto-load stored wheel polygons for this specific vehicle image
+            (async () => {
+                try {
+                    const { VehicleStorage } = await import('./utils/vehicleStorage');
+                    const stored = await VehicleStorage.getWheelPolygonsForImage(vehicleImageUrl);
+                    if (stored && stored.length > 0) {
+                        const pxPolys = stored.map(poly => poly.map(pt => ({
+                            x: Math.round((pt.xPercent / 100) * vehicleCanvas.width),
+                            y: Math.round((pt.yPercent / 100) * vehicleCanvas.height)
+                        })));
+                        vehicleCanvas.dataset.completedPolygons = JSON.stringify(pxPolys);
+                        console.log('Loaded stored wheel polygons into canvas:', pxPolys.length);
+                    }
+                } catch (e) {
+                    console.warn('Unable to load stored wheel polygons:', e);
+                } finally {
+                    // Update display to show any existing points/polygons
+                    this.updateVehiclePositionDisplay(container, vehicleCanvas);
+                }
+            })();
         };
 
         // Trigger load if image is already cached

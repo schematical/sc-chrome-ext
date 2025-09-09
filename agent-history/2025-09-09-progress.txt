@@ -1,0 +1,55 @@
+Conversation & Progress Summary (UTC)
+Date: 2025-09-09
+
+Scope
+- Fixed ChatGPT API 400 error, expanded filtering (price/weight + vehicle), added a filters introspection tool, enabled Markdown images, and increased chat widget size. Rebuilt bundle.
+
+Key Fixes
+- OpenAI tool messages: Always include string `content` to prevent 400 (missing/undefined content).
+- Implemented full function-calling loop to run tools, append tool results, and continue model reasoning.
+
+Filtering Updates
+- Price: Query uses `min` and `max`. Also parses "X to Y" or "X-Y" and supports legacy `price_min`/`price_max` as fallback.
+- Weight: Query uses `minWeight` and `maxWeight`. Also parses string ranges and supports legacy `weight_min`/`weight_max` fallback.
+- Vehicle: Added `year`, `make`, `model`, `trim`, `drive` as QS filters.
+
+New/Updated Tools
+- `apply_store_filters`: Navigates to `/store/wheels` with selected filters, waits for load, then scrapes results.
+- `get_current_filters`: Returns currently set QS filters from the active tab.
+- Debug UI: Added parameters for new filters and price/weight ranges; added a “Get Current Filters” tool.
+
+Content Script
+- `customWheelOffsetStoreExtractor.ts`: Recognizes added params (`min`, `max`, `minWeight`, `maxWeight`, vehicle keys) when extracting available filters.
+
+Markdown Rendering
+- Chat now renders images via `![alt](https://url)` with safe attributes (lazy load, async decode, no-referrer).
+
+UI Changes
+- Chat iframe size increased by 50%: 360x520 → 540x780 (capped by 70vh).
+
+Build
+- Ran `npm run build`; updated `dist` assets (chat widget, content scripts).
+
+Files Touched (primary)
+- `src/chat-widget.ts`: tool-call flow, filters, new tools, markdown images.
+- `src/content-scripts/customWheelOffsetWidget.ts`: iframe sizing.
+- `src/content-scripts/customWheelOffsetStoreExtractor.ts`: filter discovery.
+- `public/manifest.json`: already compatible; no changes required for this work.
+
+Next Options
+- Confirm exact weight param names (now using `minWeight`/`maxWeight`).
+- Optional: add retries/backoff for navigation + content script extraction.
+- Optional: normalize vehicle values from the page (dropdowns/autocomplete).
+
+Additional Updates (later on 2025-09-09)
+- Unified Chat + Debug tools via a single registry (`getUnifiedTools`) so both surfaces expose identical capabilities.
+- Added AI compositing to Debug tools and OpenAI tools: `generate_composite` now accepts `imageIndex` (0-based among images with polygons), optional `productImage`, and optional `productDescription`.
+- Implemented `get_user_vehicle_data` tool returning `{ imageCountThatCouldBeRenderedAsComposite }` (counts only images that have polygons saved).
+- Vehicle data handling: kept primary `VehicleStorage` use; added robust fallback by querying CWO content scripts for page-local `vehicleData`.
+- Polygons persistence: switched to per-image storage (`wheelPolygonsByImage`), removed legacy global `wheelPolygons`.
+- Set Vehicle wizard: added polygon-drawing modal; supports multiple polygons per image, explicit “Next Polygon” control, auto-save on Prev/Next/Done, and auto-load on navigation.
+- Compositing UI: requires polygons to generate; auto-loads per-image polygons; overlay canvas positioned above images (z-index) so points render on top.
+- Chat system prompt: added editable prompt (top of `src/chat-widget.ts`) to guide behavior, including encouraging use of Render Composite and responding with an image.
+- Composite description tweaks: always prepend `"This is a wheel(AKA rim) for a vehicle."`; when multiple polygons are present, append `"There are N wheels to replace in the image."`.
+- Error surfacing: Debug tool runner and composite tool now display full error (message + stack) and rethrow; `runGetStoreData` throws with explicit URL/context when content script isn’t present or tab isn’t on `/store/*`.
+- Build: switched to and verified `npm run build:debug` for unminified dev builds.

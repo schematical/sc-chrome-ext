@@ -33,6 +33,8 @@ export interface VehicleData {
     };
     products?: ProductPosition[];
     meshyModelId?: string;
+    // Stored wheel polygons per vehicle image URL (percent coordinates)
+    wheelPolygonsByImage?: Record<string, Array<Array<{ xPercent: number; yPercent: number }>>>;
     extractedAt: number;
 }
 
@@ -355,6 +357,52 @@ export class VehicleStorage {
         } catch (error) {
             console.error('Error updating meshy model ID:', error);
             return false;
+        }
+    }
+
+    // Removed legacy global wheelPolygons storage
+
+    /**
+     * Save wheel polygons for a specific vehicle image URL
+     */
+    static async saveWheelPolygonsForImage(
+        imageUrl: string,
+        polygons: Array<Array<{ xPercent: number; yPercent: number }>>
+    ): Promise<boolean> {
+        try {
+            const data = await this.getVehicleData();
+            if (!data) {
+                console.error('No vehicle data exists. Please set a vehicle first.');
+                return false;
+            }
+            if (!data.wheelPolygonsByImage) data.wheelPolygonsByImage = {};
+            data.wheelPolygonsByImage[imageUrl] = polygons;
+            await chrome.storage.local.set({ [this.STORAGE_KEY]: data });
+            try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data)); } catch {}
+            console.log('Saved wheel polygons for image:', imageUrl, polygons?.length || 0);
+            return true;
+        } catch (error) {
+            console.error('Error saving wheel polygons for image:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Get wheel polygons for a specific vehicle image URL
+     */
+    static async getWheelPolygonsForImage(
+        imageUrl: string
+    ): Promise<Array<Array<{ xPercent: number; yPercent: number }>> | null> {
+        try {
+            const data = await this.getVehicleData();
+            if (!data) return null;
+            if (data.wheelPolygonsByImage && data.wheelPolygonsByImage[imageUrl]) {
+                return data.wheelPolygonsByImage[imageUrl];
+            }
+            return null;
+        } catch (error) {
+            console.error('Error retrieving wheel polygons for image:', error);
+            return null;
         }
     }
 

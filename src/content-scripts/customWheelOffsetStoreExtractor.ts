@@ -281,6 +281,26 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       sendResponse({ success: false, error: error?.message || String(error) });
     }
     return true; // async
+  } else if (request?.type === 'CWO_GET_VEHICLE_DATA') {
+    try {
+      // Try page localStorage backup first (set by VehicleStorage in content context)
+      let raw: string | null = null;
+      try { raw = localStorage.getItem('vehicleData'); } catch {}
+      if (raw) {
+        try { return sendResponse({ success: true, data: JSON.parse(raw) }); } catch {}
+      }
+      // Fallback to chrome.storage.local (should be shared across contexts)
+      chrome.storage.local.get(['vehicleData'], (res) => {
+        if ((chrome.runtime as any).lastError) {
+          return sendResponse({ success: false, error: (chrome.runtime as any).lastError.message });
+        }
+        const data = res['vehicleData'] || null;
+        sendResponse({ success: !!data, data, error: data ? undefined : 'No vehicle data in storage' });
+      });
+    } catch (error: any) {
+      sendResponse({ success: false, error: error?.message || String(error) });
+    }
+    return true; // async
   }
 });
 

@@ -1,3 +1,7 @@
+// System prompt for the chat model. Edit this string to adjust assistant guidance.
+// Note: Keep concise and specific; it is prepended to every chat request.
+const CWO_SYSTEM_PROMPT = "You are helpful Assistant too your job is to help people purchase from this website, customrealoffsets.com. Once they've begun talking about a product, encourage them to use the Render Composite tool to generate an image of that. When responding to the Render Composite tool, respond as an image, not as a link. You can call get_user_vehicle_data to find out how many vehicle images with polygons are available (imageCountThatCouldBeRenderedAsComposite), then call generate_composite with imageIndex (0-based, among images that have polygons) plus an optional productImage and productDescription.";
+
 function escapeHtml(input: string): string {
   return input
     .replace(/&/g, '&amp;')
@@ -193,8 +197,12 @@ class CustomWheelOffsetChatWidget {
       const res = await t.run(values);
       this.debugOutput.textContent = JSON.stringify(res, null, 2);
     } catch (e: any) {
+      // Show full error (message + stack) and rethrow for debugging
+      const msg = e?.message || String(e);
+      const stack = e?.stack || '';
       console.error('Tool run error:', e);
-      this.debugOutput.textContent = `Error: ${e?.message || e}`;
+      this.debugOutput.textContent = `Error: ${msg}\n${stack}`;
+      throw e;
     } finally {
       this.debugSearchBtn.disabled = false;
       this.debugSearchBtn.textContent = 'Run';
@@ -202,37 +210,7 @@ class CustomWheelOffsetChatWidget {
   }
 
   private initToolsUI() {
-    this.tools = [
-      { id: 'getStoreData', name: 'Get Store Data', description: 'Extract filters, products, and pagination from the current wheels store page.', params: [], run: async () => this.runGetStoreData() },
-      { id: 'getCurrentFilters', name: 'Get Current Filters', description: 'Return the currently set query-string filters for the active store page.', params: [], run: async () => this.runGetCurrentFilters() },
-      { id: 'applyStoreFilters', name: 'Apply Store Filters', description: 'Navigate to /store/wheels with selected filters, then extract results.', params: [
-        { key: 'year', label: 'Year', type: 'string', optional: true },
-        { key: 'make', label: 'Make', type: 'string', optional: true },
-        { key: 'model', label: 'Model', type: 'string', optional: true },
-        { key: 'trim', label: 'Trim', type: 'string', optional: true },
-        { key: 'drive', label: 'Drive', type: 'string', optional: true },
-        { key: 'brand', label: 'Brand', type: 'string', optional: true },
-        { key: 'dia', label: 'Diameter', type: 'string', optional: true },
-        { key: 'width', label: 'Width', type: 'string', optional: true },
-        { key: 'offset', label: 'Offset', type: 'string', optional: true },
-        { key: 'bolt', label: 'Bolt', type: 'string', optional: true },
-        { key: 'mat', label: 'Material', type: 'string', optional: true },
-        { key: 'color', label: 'Finish', type: 'string', optional: true },
-        { key: 'price', label: 'Price Range (e.g. 100 to 250)', type: 'string', optional: true },
-        { key: 'min', label: 'Price Min', type: 'number', optional: true },
-        { key: 'max', label: 'Price Max', type: 'number', optional: true },
-        { key: 'weight', label: 'Weight Range (e.g. 20 to 35)', type: 'string', optional: true },
-        { key: 'minWeight', label: 'Weight Min', type: 'number', optional: true },
-        { key: 'maxWeight', label: 'Weight Max', type: 'number', optional: true },
-        // Legacy/alternate keys kept for compatibility with older flows
-        { key: 'price_min', label: 'Price Min (legacy)', type: 'number', optional: true },
-        { key: 'price_max', label: 'Price Max (legacy)', type: 'number', optional: true },
-        { key: 'weight_min', label: 'Weight Min (legacy)', type: 'number', optional: true },
-        { key: 'weight_max', label: 'Weight Max (legacy)', type: 'number', optional: true },
-        { key: 'reviews', label: 'Min Reviews', type: 'number', optional: true },
-        { key: 'page', label: 'Page', type: 'number', optional: true }
-      ], run: async (v: any) => this.runApplyStoreFilters(v) }
-    ];
+    this.tools = this.getUnifiedTools();
 
     this.toolSelect.innerHTML = '';
     this.tools.forEach((t, i) => {
@@ -245,6 +223,247 @@ class CustomWheelOffsetChatWidget {
     this.toolSelect.addEventListener('change', () => this.renderToolParams(this.getSelectedTool()));
     this.renderToolParams(this.getSelectedTool());
     this.debugSearchBtn.textContent = 'Run';
+  }
+
+  // Single source of truth for tools: used by Debug UI and by OpenAI function calling
+  private getUnifiedTools() {
+    return [
+      {
+        id: 'get_store_data',
+        name: 'Get Store Data',
+        description: 'Extract filters, products, and pagination from the current wheels store page.',
+        params: [],
+        run: async () => this.runGetStoreData(),
+      },
+      {
+        id: 'get_current_filters',
+        name: 'Get Current Filters',
+        description: 'Return the currently set query-string filters for the active store page.',
+        params: [],
+        run: async () => this.runGetCurrentFilters(),
+      },
+      {
+        id: 'get_user_vehicle_data',
+        name: 'Get User Vehicle Data',
+        description: 'Return simple info about the user\'s stored vehicle. Responds with imageCountThatCouldBeRenderedAsComposite (count of images that have polygons).',
+        params: [],
+        run: async () => this.runGetUserVehicleData(),
+      },
+      {
+        id: 'apply_store_filters',
+        name: 'Apply Store Filters',
+        description: 'Navigate to /store/wheels with selected filters, then extract results.',
+        params: [
+          { key: 'year', label: 'Year', type: 'string', optional: true },
+          { key: 'make', label: 'Make', type: 'string', optional: true },
+          { key: 'model', label: 'Model', type: 'string', optional: true },
+          { key: 'trim', label: 'Trim', type: 'string', optional: true },
+          { key: 'drive', label: 'Drive', type: 'string', optional: true },
+          { key: 'brand', label: 'Brand', type: 'string', optional: true },
+          { key: 'dia', label: 'Diameter', type: 'string', optional: true },
+          { key: 'width', label: 'Width', type: 'string', optional: true },
+          { key: 'offset', label: 'Offset', type: 'string', optional: true },
+          { key: 'bolt', label: 'Bolt', type: 'string', optional: true },
+          { key: 'mat', label: 'Material', type: 'string', optional: true },
+          { key: 'color', label: 'Finish', type: 'string', optional: true },
+          { key: 'price', label: 'Price Range (e.g. 100 to 250)', type: 'string', optional: true },
+          { key: 'min', label: 'Price Min', type: 'number', optional: true },
+          { key: 'max', label: 'Price Max', type: 'number', optional: true },
+          { key: 'weight', label: 'Weight Range (e.g. 20 to 35)', type: 'string', optional: true },
+          { key: 'minWeight', label: 'Weight Min', type: 'number', optional: true },
+          { key: 'maxWeight', label: 'Weight Max', type: 'number', optional: true },
+          // Legacy/alternate keys kept for compatibility with older flows
+          { key: 'price_min', label: 'Price Min (legacy)', type: 'number', optional: true },
+          { key: 'price_max', label: 'Price Max (legacy)', type: 'number', optional: true },
+          { key: 'weight_min', label: 'Weight Min (legacy)', type: 'number', optional: true },
+          { key: 'weight_max', label: 'Weight Max (legacy)', type: 'number', optional: true },
+          { key: 'reviews', label: 'Min Reviews', type: 'number', optional: true },
+          { key: 'page', label: 'Page', type: 'number', optional: true },
+        ],
+        run: async (v: any) => this.runApplyStoreFilters(v),
+      },
+      {
+        id: 'generate_composite',
+        name: 'Generate Composite (AI)',
+        description: 'Use stored vehicle, per-image polygons, and a product image to generate a composite. When responding to the Render Composite tool, respond as an image, not as a link. Use imageIndex to select which vehicle image (only among images that have polygons).',
+        params: [
+          { key: 'imageIndex', label: 'Vehicle Image Index (with polygons, 0-based)', type: 'number', optional: true },
+          { key: 'productImage', label: 'Product Image URL', type: 'string', optional: true },
+          { key: 'productDescription', label: 'Product Description', type: 'string', optional: true },
+        ],
+        run: async (v: any) => this.runGenerateCompositeViaService(v),
+      },
+    ];
+  }
+
+  // Tool implementation: get_user_vehicle_data
+  private async runGetUserVehicleData(): Promise<{ imageCountThatCouldBeRenderedAsComposite: number }> {
+    const [{ VehicleStorage }] = await Promise.all([
+      import('./utils/vehicleStorage'),
+    ]);
+
+    // Try storage first
+    let vData = await VehicleStorage.getVehicleData();
+    // Fallback to active tab content script (page-local backup)
+    if (!vData) {
+      try {
+        const tab = await this.getActiveTab();
+        if (tab?.id != null) {
+          const fetched: any = await new Promise((resolve, reject) => {
+            chrome.tabs.sendMessage(tab.id!, { type: 'CWO_GET_VEHICLE_DATA' }, (res) => {
+              if ((chrome.runtime as any).lastError) return reject(new Error((chrome.runtime as any).lastError.message));
+              resolve(res);
+            });
+          });
+          if (fetched?.success && fetched?.data) vData = fetched.data;
+        }
+      } catch {
+        // ignore; treat as no data
+      }
+    }
+
+    if (!vData?.images?.length) {
+      return { imageCountThatCouldBeRenderedAsComposite: 0 };
+    }
+
+    // Count images that have one or more stored polygons
+    const counts: number[] = await Promise.all(
+      vData.images.map(async (imgUrl: string) => {
+        try {
+          const polys = await VehicleStorage.getWheelPolygonsForImage(imgUrl);
+          return Array.isArray(polys) && polys.length > 0 ? 1 : 0;
+        } catch {
+          return 0;
+        }
+      })
+    );
+    const imageCountThatCouldBeRenderedAsComposite = counts.reduce((a: number, b: number) => a + b, 0);
+    return { imageCountThatCouldBeRenderedAsComposite };
+  }
+
+  // Debug tool: call CompositingService using stored vehicle + first product + stored polygons
+  private async runGenerateCompositeViaService(args?: { imageIndex?: number; productImage?: string; productDescription?: string }) {
+    // Update output early
+    this.debugOutput.textContent = 'Preparing composite request...';
+    try {
+      const [{ VehicleStorage }, { CompositingService }] = await Promise.all([
+        import('./utils/vehicleStorage'),
+        import('./services/compositingService'),
+      ]);
+
+      // Get stored vehicle data (scene)
+      let vData = await VehicleStorage.getVehicleData();
+      // Fallback: ask active tab content script for page-local backup if missing
+      if (!vData) {
+        try {
+          const tab = await this.getActiveTab();
+          if (tab?.id != null) {
+            const fetched: any = await new Promise((resolve, reject) => {
+              chrome.tabs.sendMessage(tab.id!, { type: 'CWO_GET_VEHICLE_DATA' }, (res) => {
+                if ((chrome.runtime as any).lastError) return reject(new Error((chrome.runtime as any).lastError.message));
+                resolve(res);
+              });
+            });
+            if (fetched?.success && fetched?.data) {
+              vData = fetched.data;
+            }
+          }
+        } catch (e) {
+          console.warn('Fallback vehicle fetch failed:', e);
+        }
+      }
+      if (!vData || !vData.images?.length) {
+        throw new Error('No stored vehicle found. Go to a gallery page and click "Set Vehicle" first.');
+      }
+      // Build list of vehicle images that have polygons
+      const imagesWithPolys: Array<{ url: string; polygons: Array<Array<{ xPercent: number; yPercent: number }>> } > = [];
+      for (const img of vData.images) {
+        const polys = await VehicleStorage.getWheelPolygonsForImage(img);
+        if (Array.isArray(polys) && polys.length > 0) imagesWithPolys.push({ url: img, polygons: polys });
+      }
+      if (imagesWithPolys.length === 0) {
+        throw new Error('No stored wheel polygons found. Open the compositing UI on a product page and draw the wheel polygons first.');
+      }
+      // Use provided index (0-based among imagesWithPolys), otherwise first
+      let selIndex = 0;
+      if (typeof args?.imageIndex === 'number' && Number.isFinite(args.imageIndex)) {
+        const idx = Math.floor(args.imageIndex);
+        if (idx < 0 || idx >= imagesWithPolys.length) {
+          throw new Error(`imageIndex out of range. Provided ${idx}, available ${imagesWithPolys.length}.`);
+        }
+        selIndex = idx;
+      }
+      const sceneUrl = imagesWithPolys[selIndex].url;
+      const wheelPolygons = imagesWithPolys[selIndex].polygons;
+
+      // Determine product image: prefer provided arg, fallback to first product on store page
+      let productUrl = (args?.productImage || '').trim();
+      if (!productUrl) {
+        const storeData = await this.runGetStoreData();
+        const firstWithImage = (storeData?.products || []).find((p: any) => p?.image);
+        if (!firstWithImage?.image) {
+          throw new Error('Could not find a product image on the current page. Provide productImage or navigate to the wheels store grid.');
+        }
+        productUrl = firstWithImage.image;
+      }
+
+      // Descriptions
+      // Determine product description: prefer provided arg, fallback to generated
+      let prodDesc = (args?.productDescription || '').trim();
+      if (!prodDesc) {
+        const { sceneDescription, productDescription } = await CompositingService.generateDescriptions(sceneUrl, productUrl);
+        prodDesc = productDescription;
+        // sceneDescription is still used below via CompositingService.generateDescriptions if needed
+        // We'll compute sceneDescription again to keep code simple
+        const d2 = await CompositingService.generateDescriptions(sceneUrl, productUrl);
+        // Replace sceneDesc/prodDesc variables
+        var sceneDesc = d2.sceneDescription;
+        prodDesc = d2.productDescription;
+      }
+      // Always compute scene description for completeness
+      const { sceneDescription: sceneDesc2 } = await CompositingService.generateDescriptions(sceneUrl, productUrl);
+      const sceneDescFinal = sceneDesc2;
+
+      // Prepend required phrase to product description
+      const prefix = 'This is a wheel(AKA rim) for a vehicle';
+      if (!prodDesc || !prodDesc.trim().toLowerCase().startsWith(prefix.toLowerCase())) {
+        prodDesc = `${prefix}. ${prodDesc || ''}`.trim();
+      }
+      // If multiple polygons are selected, instruct the service to replace multiple wheels
+      if (Array.isArray(wheelPolygons) && wheelPolygons.length > 1) {
+        const count = wheelPolygons.length;
+        const plural = count === 1 ? 'wheel' : 'wheels';
+        prodDesc = `${prodDesc} There are ${count} ${plural} to replace in the image.`.trim();
+      }
+
+      const req = {
+        sceneUrl,
+        productUrl,
+        placementGeometry: wheelPolygons,
+        sceneDescription: sceneDescFinal,
+        productDescription: prodDesc,
+      } as const;
+
+      this.debugOutput.textContent = 'Calling compositing service...';
+      const resp = await CompositingService.generateComposite(req);
+
+      // Resolve image URL against API base if needed
+      const { ConfigService } = await import('./services/configService');
+      const base = await ConfigService.getApiBaseUrl();
+      const finalUrl = resp.finalImageUrl.startsWith('http') ? resp.finalImageUrl : `${base}${resp.finalImageUrl}`;
+
+      // Render image only (markdown-like result in debug output)
+      this.debugOutput.innerHTML = `<img src="${finalUrl}" alt="Composite" loading="lazy" decoding="async" style="max-width:100%;height:auto;" />`;
+
+      return { success: true, image: finalUrl };
+    } catch (e: any) {
+      // Don't hide errors in POC: show full details and rethrow
+      const msg = e?.message || String(e);
+      const stack = e?.stack || '';
+      this.debugOutput.textContent = `Error: ${msg}\n${stack}`;
+      console.error('Composite generation error:', e);
+      throw e;
+    }
   }
 
   private getSelectedTool() {
@@ -289,11 +508,24 @@ class CustomWheelOffsetChatWidget {
   private async runGetStoreData(): Promise<any> {
     const tab = await this.getActiveTab();
     if (!tab || tab.id == null) throw new Error('No active tab');
+    const url = tab.url || '';
+    // Be explicit; store extractor is only injected on /store/* pages
+    try {
+      const u = new URL(url);
+      const isCWO = /(^|\.)customwheeloffset\.com$/i.test(u.hostname);
+      if (!isCWO) throw new Error(`Active tab is not on customwheeloffset.com: ${url}`);
+      if (!u.pathname.startsWith('/store/')) throw new Error(`Active tab is not a store page: ${url}`);
+    } catch (e) {
+      // If URL parsing fails, still show the raw URL in the error
+      throw e instanceof Error ? e : new Error(`Active tab unavailable or invalid URL: ${url}`);
+    }
+
     return await new Promise((resolve, reject) => {
       chrome.tabs.sendMessage(tab.id!, { type: 'CWO_GET_STORE_DATA' }, (res) => {
-        if ((chrome.runtime as any).lastError) return reject(new Error((chrome.runtime as any).lastError.message));
-        if (!res) return reject(new Error('No response from content script'));
-        res.success ? resolve(res.data) : reject(new Error(res.error || 'Unknown error'));
+        const lastErr = (chrome.runtime as any).lastError;
+        if (lastErr) return reject(new Error(`Content script error: ${lastErr.message} • URL: ${url}`));
+        if (!res) return reject(new Error(`No response from content script • URL: ${url}`));
+        res.success ? resolve(res.data) : reject(new Error(res.error || `Unknown extractor error • URL: ${url}`));
       });
     });
   }
@@ -419,16 +651,28 @@ class CustomWheelOffsetChatWidget {
 
     const toOpenAIMsgs = () => {
       const msgs: any[] = [];
+      if (CWO_SYSTEM_PROMPT && CWO_SYSTEM_PROMPT.trim()) {
+        msgs.push({ role: 'system', content: CWO_SYSTEM_PROMPT.trim() });
+      }
       for (const m of this.messages) msgs.push({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.content });
       msgs.push({ role: 'user', content: userText });
       return msgs;
     };
 
-    const tools = [
-      { type: 'function', function: { name: 'get_store_data', description: 'Extract filters, products, and pagination from the current wheels store page.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
-      { type: 'function', function: { name: 'get_current_filters', description: 'Return the currently set query-string filters from the active store page.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
-      { type: 'function', function: { name: 'apply_store_filters', description: 'Navigate the active tab to /store/wheels with selected filters, then return store data.', parameters: { type: 'object', properties: { year: { type: 'string' }, make: { type: 'string' }, model: { type: 'string' }, trim: { type: 'string' }, drive: { type: 'string' }, brand: { type: 'string' }, dia: { type: 'string' }, width: { type: 'string' }, offset: { type: 'string' }, bolt: { type: 'string' }, mat: { type: 'string' }, color: { type: 'string' }, reviews: { type: 'number' }, page: { type: 'number' }, price: { type: 'string' }, min: { type: 'number' }, max: { type: 'number' }, weight: { type: 'string' }, minWeight: { type: 'number' }, maxWeight: { type: 'number' }, price_min: { type: 'number' }, price_max: { type: 'number' }, weight_min: { type: 'number' }, weight_max: { type: 'number' } }, additionalProperties: false } } }
-    ];
+    const tools = this.getUnifiedTools().map((t) => {
+      const props: any = {};
+      for (const p of (t.params || [])) {
+        props[p.key] = { type: p.type === 'number' ? 'number' : 'string' };
+      }
+      return {
+        type: 'function',
+        function: {
+          name: t.id,
+          description: t.description,
+          parameters: { type: 'object', properties: props, additionalProperties: false },
+        },
+      } as any;
+    });
 
     const callOpenAI = async (messages: any[]) => {
       const body = { model, messages, tools, tool_choice: 'auto' } as any;
@@ -440,10 +684,9 @@ class CustomWheelOffsetChatWidget {
     };
 
     const runTool = async (name: string, args: any) => {
-      if (name === 'get_store_data') return await this.runGetStoreData();
-      if (name === 'get_current_filters') return await this.runGetCurrentFilters();
-      if (name === 'apply_store_filters') return await this.runApplyStoreFilters(args || {});
-      throw new Error(`Unknown tool: ${name}`);
+      const t = this.getUnifiedTools().find((x) => x.id === name);
+      if (!t) throw new Error(`Unknown tool: ${name}`);
+      return await t.run(args || {});
     };
 
     let messages = toOpenAIMsgs();

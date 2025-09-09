@@ -249,3 +249,29 @@ init();
 
 // Ensure this file is treated as a module under isolatedModules
 export {};
+
+// Provide vehicle data via message for fallback retrieval from chat widget
+try {
+  chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+    if (request?.type === 'CWO_GET_VEHICLE_DATA') {
+      try {
+        let raw: string | null = null;
+        try { raw = localStorage.getItem('vehicleData'); } catch {}
+        if (raw) {
+          try { return sendResponse({ success: true, data: JSON.parse(raw) }); } catch {}
+        }
+        chrome.storage.local.get(['vehicleData'], (res) => {
+          if ((chrome.runtime as any).lastError) {
+            sendResponse({ success: false, error: (chrome.runtime as any).lastError.message });
+          } else {
+            const data = res['vehicleData'] || null;
+            sendResponse({ success: !!data, data, error: data ? undefined : 'No vehicle data in storage' });
+          }
+        });
+      } catch (error: any) {
+        sendResponse({ success: false, error: error?.message || String(error) });
+      }
+      return true; // keep port open for async sendResponse
+    }
+  });
+} catch {}
