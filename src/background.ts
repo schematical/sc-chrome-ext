@@ -32,10 +32,10 @@ function buildToolSchema() {
   // Schema only; widget executes these tools.
   type ParamDef = { type: 'string'|'number'; description?: string } | 'string' | 'number';
   const defs: Array<{ name: string; description: string; params?: Record<string, ParamDef> }>= [
-    { name: 'get_store_data', description: 'Extract filters, products, and pagination from the current wheels store page.' },
+    { name: 'get_store_data', description: 'Extract filters, products, and pagination from the current wheels store page. Call this after you run the `apply_store_filters` to figure out what is on the page.' },
     { name: 'get_current_filters', description: 'Return current query-string filters for the store page.' },
     { name: 'get_user_vehicle_data', description: "Return info about user's stored vehicle including imageCountThatCouldBeRenderedAsComposite." },
-    { name: 'apply_store_filters', description: 'Navigate to /store/wheels with selected filters, then extract results.', params: {
+    { name: 'apply_store_filters', description: 'Navigate to /store/wheels with selected filters, then extract results. If the filters already match the ones passed to you in the system message don\'t call this', params: {
         year: 'string', make: 'string', model: { type: 'string', description: 'Wheel Model (not vehicle model)' }, trim: 'string', drive: 'string', brand: 'string', dia: 'string', width: 'string', offset: 'string', bolt: 'string', mat: 'string', color: 'string', price: 'string', min: 'number', max: 'number', weight: 'string', minWeight: 'number', maxWeight: 'number', reviews: 'number', page: 'number', price_min: 'number', price_max: 'number', weight_min: 'number', weight_max: 'number'
       }
     },
@@ -63,6 +63,11 @@ async function callOpenAI(messages: Array<any>): Promise<any> {
   if (!cfg) throw new Error('OpenAI API key is not set. Update it in Settings.');
   const { apiKey, model } = cfg;
   const body: any = { model: model || 'gpt-4o-mini', messages, tools: buildToolSchema(), tool_choice: 'auto' };
+  console.groupCollapsed('[CHAT BG] callOpenAI');
+  console.debug('model:', body.model, 'msgCount:', (messages || []).length);
+  const last = messages[messages.length - 1];
+  console.debug('lastMsgRole:', last?.role, 'hasToolCalls:', Array.isArray(last?.tool_calls) && last.tool_calls.length > 0);
+  console.groupEnd();
   currentAbort = new AbortController();
   const resp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -113,12 +118,48 @@ function pendingToolCallIds(state: ChatState): string[] {
   const assistant = state.messages[idx];
   const required = new Set<string>((assistant.tool_calls || []).map((tc: any) => tc.id));
   // Collect following tool messages and mark fulfilled ids
+  const seenTools: string[] = [];
   for (let j = idx + 1; j < state.messages.length; j++) {
     const m = state.messages[j];
     if (m.role !== 'tool') break; // stop at first non-tool message
     if (m.tool_call_id) required.delete(m.tool_call_id);
+    if (m.tool_call_id) seenTools.push(m.tool_call_id);
   }
+
+    console.groupCollapsed('[CHAT BG] pendingToolCallIds');
+    console.debug('assistantIndex:', idx);
+    console.debug('assistantToolCallIds:', (assistant.tool_calls || []).map((tc: any) => tc.id));
+    console.debug('consecutiveToolMessageIds:', seenTools);
+    console.debug('missingIds:', Array.from(required));
+    console.groupEnd();
+
   return Array.from(required);
+}
+
+function getPendingToolCalls(state: ChatState): Array<{ id: string; name: string; arguments: any }> {
+  // Find last assistant with tool_calls
+  let idx = -1;
+  for (let i = state.messages.length - 1; i >= 0; i--) {
+    const m = state.messages[i];
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length) { idx = i; break; }
+  }
+  if (idx === -1) return [];
+  const assistant = state.messages[idx];
+  const missing = new Set<string>(pendingToolCallIds(state));
+  const out: Array<{ id: string; name: string; arguments: any }> = [];
+  for (const tc of (assistant.tool_calls || [])) {
+    const id = tc.id;
+    if (!missing.has(id)) continue;
+    const name = tc.function?.name;
+    const rawArgs = tc.function?.arguments || '{}';
+    let parsed: any;
+    try { parsed = JSON.parse(rawArgs); } catch (e) { console.error('[CHAT BG] Failed parsing pending tool arguments:', rawArgs, e); parsed = rawArgs; }
+    out.push({ id, name, arguments: parsed });
+  }
+  console.groupCollapsed('[CHAT BG] getPendingToolCalls');
+  console.debug('pending:', out.map(t => `${t.name}:${t.id}`));
+  console.groupEnd();
+  return out;
 }
 
 function serializeError(e: any): SerializedError {
@@ -145,50 +186,28 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "setVehicle" && tab?.id) {
     // Send message to content script to extract vehicle images
-    try {
-      chrome.tabs.sendMessage(tab.id, {
-        type: "EXTRACT_VEHICLE_IMAGES"
-      });
-    } catch (error) {
-      console.error("Error sending message to content script:", error);
-    }
+    chrome.tabs.sendMessage(tab.id, {
+      type: "EXTRACT_VEHICLE_IMAGES"
+    });
   } else if (info.menuItemId === "addToVehicle" && info.srcUrl) {
     // Add image directly to vehicle data
-    try {
-      const success = await VehicleStorage.addImageToVehicle(info.srcUrl);
-      
-      if (success) {
-        console.log("Image added to vehicle successfully:", info.srcUrl);
-        
-        // Open vehicle gallery in new tab with the newly added image highlighted
-        const galleryUrl = chrome.runtime.getURL('vehicle-gallery.html') + `?newImage=${encodeURIComponent(info.srcUrl)}`;
-        chrome.tabs.create({ url: galleryUrl });
-        
-        // Show success notification
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'images/icon.png',
-          title: 'Image Added to Vehicle',
-          message: `Added image to vehicle successfully. Gallery opened in new tab.`
-        });
-      } else {
-        // Show error notification
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'images/icon.png',
-          title: 'Error Adding Image',
-          message: `No vehicle data exists. Please set a vehicle first.`
-        });
-      }
-    } catch (error) {
-      console.error("Error adding image to vehicle:", error);
-      
-      // Show error notification
+    const success = await VehicleStorage.addImageToVehicle(info.srcUrl);
+    if (success) {
+      console.log("Image added to vehicle successfully:", info.srcUrl);
+      const galleryUrl = chrome.runtime.getURL('vehicle-gallery.html') + `?newImage=${encodeURIComponent(info.srcUrl)}`;
+      chrome.tabs.create({ url: galleryUrl });
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'images/icon.png',
+        title: 'Image Added to Vehicle',
+        message: `Added image to vehicle successfully. Gallery opened in new tab.`
+      });
+    } else {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'images/icon.png',
         title: 'Error Adding Image',
-        message: `Failed to add image to vehicle`
+        message: `No vehicle data exists. Please set a vehicle first.`
       });
     }
   }
@@ -213,7 +232,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'CHAT_CANCEL': {
       (async () => {
         try {
-          if (currentAbort) { try { currentAbort.abort(); } catch {} currentAbort = null; }
+          if (currentAbort) { currentAbort.abort(); currentAbort = null; }
           const state = await getChatState();
           state.inFlight = false;
           await setChatState(state);
@@ -230,6 +249,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         try {
           const { userText, toolMessages, systemContext } = request as { userText?: string, toolMessages?: Array<{ id: string, content: string }>, systemContext?: string };
           const state = await getChatState();
+          console.groupCollapsed('[CHAT BG] CHAT_SEND received');
+          console.debug('hasUserText:', !!(userText && userText.trim()), 'toolMessagesCount:', Array.isArray(toolMessages) ? toolMessages.length : 0);
+          if (Array.isArray(toolMessages)) console.debug('toolMessageIds:', toolMessages.map(t => t.id));
+          console.debug('stateMsgCount(before):', state.messages.length);
+          console.groupEnd();
 
           if (typeof userText === 'string' && userText.trim()) {
             state.messages.push({ role: 'user', content: userText.trim(), ts: Date.now() });
@@ -245,6 +269,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           // Validate no pending tool calls before calling the model again
           const missing = pendingToolCallIds(state);
           if (missing.length) {
+            console.groupCollapsed('[CHAT BG] CHAT_SEND pending tool_calls');
+            console.debug('missingIds:', missing);
+            // Dump last 6 messages for quick diagnosis
+            const tail = state.messages.slice(-6);
+            console.debug('tail:', tail.map(m => ({ role: m.role, hasToolCalls: Array.isArray(m.tool_calls) && m.tool_calls.length > 0, tool_call_id: m.tool_call_id, contentPreview: (m.content||'').slice(0,80) })));
+            console.groupEnd();
             state.inFlight = false; await setChatState(state);
             sendResponse({ ok: false, error: { message: `Pending tool_calls require tool results for ids: ${missing.join(', ')}` }, state });
             return;
@@ -265,11 +295,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
           state.inFlight = false; await setChatState(state);
 
-          const toolCalls = (msg?.tool_calls || []).map((tc: any) => ({
-            id: tc.id,
-            name: tc.function?.name,
-            arguments: (() => { try { return JSON.parse(tc.function?.arguments || '{}'); } catch { return {}; } })(),
-          }));
+          const toolCalls = (msg?.tool_calls || []).map((tc: any) => {
+            const rawArgs = tc.function?.arguments || '{}';
+            let parsed: any;
+            try {
+              parsed = JSON.parse(rawArgs);
+            } catch (e) {
+              console.error('[CHAT BG] Failed parsing tool arguments:', rawArgs, e);
+              parsed = rawArgs;
+            }
+            return { id: tc.id, name: tc.function?.name, arguments: parsed };
+          });
+          console.groupCollapsed('[CHAT BG] CHAT_SEND OpenAI response');
+          console.debug('assistantTextLen:', assistantText.length, 'toolCalls:', toolCalls.map((t:any) => `${t.name}:${t.id}`));
+          console.groupEnd();
 
           sendResponse({ ok: true, assistant: assistantText, toolCalls, state });
         } catch (e) {
@@ -277,6 +316,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           state.inFlight = false; state.lastError = serializeError(e);
           await setChatState(state);
           sendResponse({ ok: false, error: serializeError(e), state });
+        }
+      })();
+      return true;
+    }
+
+    case 'CHAT_INIT': {
+      (async () => {
+        try {
+          const state = await getChatState();
+          const pending = getPendingToolCalls(state);
+          sendResponse({ ok: true, pending, state });
+        } catch (e) {
+          sendResponse({ ok: false, error: serializeError(e) });
         }
       })();
       return true;

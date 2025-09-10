@@ -35,13 +35,79 @@ class CustomWheelOffsetChatWidget {
     this.loadChatHistory();
     // probe current page filters to pass as chat context
     this.loadContextFilters().catch(() => {});
+    // attempt to resume any pending tool-calls on widget startup
+    this.resumePendingToolCalls().catch((e) => {
+      console.error('[CWO Chat] Failed to resume pending tool calls:', e);
+    });
     this.setWelcomeTime();
     // Ensure we start scrolled to bottom on open
-    try { this.scrollToBottom(); } catch {}
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('autoOpen') === '1') window.scrollTo(0, 0);
-    } catch {}
+    this.scrollToBottom();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autoOpen') === '1') window.scrollTo(0, 0);
+  }
+
+  private async resumePendingToolCalls() {
+    const send = (payload: any) => new Promise<any>((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'CHAT_INIT', ...payload }, (res) => {
+        const lastErr = (chrome.runtime as any).lastError;
+        if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
+        resolve(res);
+      });
+    });
+
+    const toSend = (payload: any) => new Promise<any>((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'CHAT_SEND', ...payload }, (res) => {
+        const lastErr = (chrome.runtime as any).lastError;
+        if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
+        resolve(res);
+      });
+    });
+
+    const runTool = async (name: string, args: any) => {
+      const t = this.getUnifiedTools().find((x) => x.id === name);
+      if (!t) throw new Error(`Unknown tool: ${name}`);
+      return await t.run(args || {});
+    };
+
+    const initRes = await send({});
+    if (!initRes?.ok) throw new Error(initRes?.error?.message || 'CHAT_INIT failed');
+    const pending: Array<{ id: string; name: string; arguments: any }> = initRes.pending || [];
+    if (!pending.length) return; // nothing to do
+
+    console.groupCollapsed('[CWO Chat] Resuming pending tool calls');
+    console.log('pending:', pending.map(p => `${p.name}:${p.id}`));
+    console.groupEnd();
+
+    // Execute all pending tool calls and return results
+    const toolMessages: Array<{ id: string; content: string }> = [];
+    for (const p of pending) {
+      const result = await runTool(p.name, p.arguments);
+      const contentStr = typeof result === 'string' ? result : JSON.stringify(result ?? null);
+      toolMessages.push({ id: p.id, content: contentStr });
+    }
+
+    let res = await toSend({ toolMessages });
+    if (!res?.ok) throw new Error(res?.error?.message || 'CHAT_SEND after resume failed');
+    if (res.assistant && String(res.assistant).trim()) {
+      this.addMessage('assistant', String(res.assistant));
+    }
+
+    // If more tool calls are returned, iterate similarly (up to 2 extra rounds)
+    for (let i = 0; i < 2; i++) {
+      const nextCalls: Array<{ id: string; name: string; arguments: any }> = res.toolCalls || [];
+      if (!nextCalls.length) break;
+      const msgs: Array<{ id: string; content: string }> = [];
+      for (const tc of nextCalls) {
+        const r = await runTool(tc.name, tc.arguments || {});
+        const c = typeof r === 'string' ? r : JSON.stringify(r ?? null);
+        msgs.push({ id: tc.id, content: c });
+      }
+      res = await toSend({ toolMessages: msgs });
+      if (!res?.ok) throw new Error(res?.error?.message || 'CHAT_SEND follow-up failed');
+      if (res.assistant && String(res.assistant).trim()) {
+        this.addMessage('assistant', String(res.assistant));
+      }
+    }
   }
 
   private async loadContextFilters() {
@@ -52,19 +118,17 @@ class CustomWheelOffsetChatWidget {
 
       // Also pull potential filter values from the page
       let potentialsLine = '';
-      try {
-        const storeData = await this.runGetStoreData();
-        const wanted = new Set(['brand','dia','width','offset','bolt','mat','color','wmodel','model']);
-        const parts: string[] = [];
-        (storeData?.filters || []).forEach((g: any) => {
-          if (!wanted.has(g.key)) return;
-          const vals = Array.from(new Set((g.options || []).map((o: any) => String(o.value || o.label || '').trim()).filter(Boolean)));
-          const limited = vals.slice(0, 12).join('|');
-          const keyLabel = (g.key === 'model' || g.key === 'wmodel') ? 'wheelModel' : g.key;
-          if (limited) parts.push(`${keyLabel}=[${limited}${vals.length > 12 ? '|…' : ''}]`);
-        });
-        if (parts.length) potentialsLine = `\nPotential filter values -> ${parts.join(', ')}`;
-      } catch {}
+      const storeData = await this.runGetStoreData();
+      const wanted = new Set(['brand','dia','width','offset','bolt','mat','color','wmodel','model']);
+      const parts: string[] = [];
+      (storeData?.filters || []).forEach((g: any) => {
+        if (!wanted.has(g.key)) return;
+        const vals = Array.from(new Set((g.options || []).map((o: any) => String(o.value || o.label || '').trim()).filter(Boolean)));
+        const limited = vals.slice(0, 12).join('|');
+        const keyLabel = (g.key === 'model' || g.key === 'wmodel') ? 'wheelModel' : g.key;
+        if (limited) parts.push(`${keyLabel}=[${limited}${vals.length > 12 ? '|…' : ''}]`);
+      });
+      if (parts.length) potentialsLine = `\nPotential filter values -> ${parts.join(', ')}`;
 
       if (!selectedEntries.length && !potentialsLine) { this.contextFiltersText = null; return; }
       const selectedLine = selectedEntries.length ? `Context: current store filters -> ${selectedEntries.map(([k,v]) => `${(k==='model'||k==='wmodel')?'wheelModel':k}=${String(v)}`).join(', ')}` : '';
@@ -559,15 +623,7 @@ class CustomWheelOffsetChatWidget {
       // If URL parsing fails, still show the raw URL in the error
       throw e instanceof Error ? e : new Error(`Active tab unavailable or invalid URL: ${url}`);
     }
-
-    return await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tab.id!, { type: 'CWO_GET_STORE_DATA' }, (res) => {
-        const lastErr = (chrome.runtime as any).lastError;
-        if (lastErr) return reject(new Error(`Content script error: ${lastErr.message} • URL: ${url}`));
-        if (!res) return reject(new Error(`No response from content script • URL: ${url}`));
-        res.success ? resolve(res.data) : reject(new Error(res.error || `Unknown extractor error • URL: ${url}`));
-      });
-    });
+    return await this.sendToContentWithRetry(tab.id!, { type: 'CWO_GET_STORE_DATA' }, url);
   }
 
   private async runGetCurrentFilters(): Promise<any> {
@@ -684,7 +740,39 @@ class CustomWheelOffsetChatWidget {
       });
     });
 
-    return this.runGetStoreData();
+    // After page load, the content script may take a moment to register.
+    // Poll the content script for readiness by requesting store data with retry.
+    return await this.sendToContentWithRetry(tab.id!, { type: 'CWO_GET_STORE_DATA' }, targetUrl);
+  }
+
+  // Robust content-script messaging with retry to handle page navigations and (re)injection delays
+  private async sendToContentWithRetry(tabId: number, message: any, urlForError: string, timeoutMs = 10000, intervalMs = 300): Promise<any> {
+    const start = Date.now();
+    let lastErrMsg: string | null = null;
+    while (Date.now() - start < timeoutMs) {
+      const res = await new Promise<any>((resolve) => {
+        try {
+          chrome.tabs.sendMessage(tabId, message, (reply) => {
+            const lastErr = (chrome.runtime as any).lastError;
+            if (lastErr) {
+              lastErrMsg = lastErr.message || 'unknown error';
+              return resolve(null);
+            }
+            resolve(reply);
+          });
+        } catch (e: any) {
+          lastErrMsg = e?.message || String(e);
+          resolve(null);
+        }
+      });
+      if (res && typeof res === 'object') {
+        if (res.success) return res.data;
+        // content script responded with an error; surface it
+        throw new Error(res.error || `Extractor error • URL: ${urlForError}`);
+      }
+      await new Promise(r => setTimeout(r, intervalMs));
+    }
+    throw new Error(`Content script not ready after navigation • URL: ${urlForError}${lastErrMsg ? ` • ${lastErrMsg}` : ''}`);
   }
 
   // ---------- OpenAI function-calling chat ----------
@@ -719,13 +807,13 @@ class CustomWheelOffsetChatWidget {
         for (const tc of toolCalls) {
           const name = tc.name;
           const args = tc.arguments || {};
-          try { console.groupCollapsed(`[CWO Chat] Tool call: ${name}`); console.log('Arguments:', args); console.groupEnd(); } catch {}
+          console.groupCollapsed(`[CWO Chat] Tool call: ${name}`); console.log('Arguments:', args); console.groupEnd();
           const result = await runTool(name, args);
           let contentStr: string;
           if (typeof result === 'string') contentStr = result;
-          else { try { contentStr = JSON.stringify(result ?? null); } catch { contentStr = String(result); } }
+          else { contentStr = JSON.stringify(result ?? null); }
           toolMessages.push({ id: tc.id, content: contentStr });
-          try { console.groupCollapsed(`[CWO Chat] Tool result: ${name}`); console.log('Result:', result); console.groupEnd(); } catch {}
+          console.groupCollapsed(`[CWO Chat] Tool result: ${name}`); console.log('Result:', result); console.groupEnd();
         }
         // Send tool results back
         res = await send({ toolMessages });
