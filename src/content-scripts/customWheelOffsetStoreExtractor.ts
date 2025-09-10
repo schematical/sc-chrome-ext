@@ -54,6 +54,7 @@ const PARAM_LABELS: Record<string, string> = {
   year: 'Year',
   make: 'Make',
   model: 'Model',
+  wmodel: 'Model',
   trim: 'Trim',
   drive: 'Drive',
   dia: 'Wheel Diameter',
@@ -125,7 +126,7 @@ function extractFiltersFromLinks(): FilterGroup[] {
   }
 
   // Order groups in a useful order
-  const order = ['year', 'make', 'model', 'trim', 'drive', 'brand', 'dia', 'width', 'offset', 'bolt', 'mat', 'color', 'reviews', 'price', 'weight'];
+  const order = ['year', 'make', 'model', 'wmodel', 'trim', 'drive', 'brand', 'dia', 'width', 'offset', 'bolt', 'mat', 'color', 'reviews', 'price', 'weight'];
   return Array.from(groups.values()).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 }
 

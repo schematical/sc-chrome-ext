@@ -53,3 +53,4 @@ Additional Updates (later on 2025-09-09)
 - Composite description tweaks: always prepend `"This is a wheel(AKA rim) for a vehicle."`; when multiple polygons are present, append `"There are N wheels to replace in the image."`.
 - Error surfacing: Debug tool runner and composite tool now display full error (message + stack) and rethrow; `runGetStoreData` throws with explicit URL/context when content script isn’t present or tab isn’t on `/store/*`.
 - Build: switched to and verified `npm run build:debug` for unminified dev builds.
+

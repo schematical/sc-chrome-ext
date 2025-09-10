@@ -1,6 +1,6 @@
 // System prompt for the chat model. Edit this string to adjust assistant guidance.
 // Note: Keep concise and specific; it is prepended to every chat request.
-const CWO_SYSTEM_PROMPT = "You are helpful Assistant too your job is to help people purchase from this website, customrealoffsets.com. Once they've begun talking about a product, encourage them to use the Render Composite tool to generate an image of that. When responding to the Render Composite tool, respond as an image, not as a link. You can call get_user_vehicle_data to find out how many vehicle images with polygons are available (imageCountThatCouldBeRenderedAsComposite), then call generate_composite with imageIndex (0-based, among images that have polygons) plus an optional productImage and productDescription.";
+
 
 function escapeHtml(input: string): string {
   return input
@@ -14,6 +14,7 @@ class CustomWheelOffsetChatWidget {
   private currentMode: 'chat' | 'debug' = 'chat';
   private messages: Array<{ sender: 'user' | 'assistant'; content: string; timestamp: Date }> = [];
   private isLoading = false;
+  private contextFiltersText: string | null = null;
 
   private modeToggleBtn!: HTMLButtonElement;
   private chatMode!: HTMLElement;
@@ -32,6 +33,8 @@ class CustomWheelOffsetChatWidget {
     this.initializeElements();
     this.bindEvents();
     this.loadChatHistory();
+    // probe current page filters to pass as chat context
+    this.loadContextFilters().catch(() => {});
     this.setWelcomeTime();
     // Ensure we start scrolled to bottom on open
     try { this.scrollToBottom(); } catch {}
@@ -39,6 +42,34 @@ class CustomWheelOffsetChatWidget {
       const params = new URLSearchParams(window.location.search);
       if (params.get('autoOpen') === '1') window.scrollTo(0, 0);
     } catch {}
+  }
+
+  private async loadContextFilters() {
+    try {
+      const ctx = await this.runGetCurrentFilters();
+      const filters = ctx?.filters || {};
+      const selectedEntries = Object.entries(filters).filter(([_, v]) => v !== undefined && v !== null && String(v).trim() !== '');
+
+      // Also pull potential filter values from the page
+      let potentialsLine = '';
+      try {
+        const storeData = await this.runGetStoreData();
+        const wanted = new Set(['brand','dia','width','offset','bolt','mat','color','wmodel','model']);
+        const parts: string[] = [];
+        (storeData?.filters || []).forEach((g: any) => {
+          if (!wanted.has(g.key)) return;
+          const vals = Array.from(new Set((g.options || []).map((o: any) => String(o.value || o.label || '').trim()).filter(Boolean)));
+          const limited = vals.slice(0, 12).join('|');
+          const keyLabel = (g.key === 'model' || g.key === 'wmodel') ? 'wheelModel' : g.key;
+          if (limited) parts.push(`${keyLabel}=[${limited}${vals.length > 12 ? '|…' : ''}]`);
+        });
+        if (parts.length) potentialsLine = `\nPotential filter values -> ${parts.join(', ')}`;
+      } catch {}
+
+      if (!selectedEntries.length && !potentialsLine) { this.contextFiltersText = null; return; }
+      const selectedLine = selectedEntries.length ? `Context: current store filters -> ${selectedEntries.map(([k,v]) => `${(k==='model'||k==='wmodel')?'wheelModel':k}=${String(v)}`).join(', ')}` : '';
+      this.contextFiltersText = `${selectedLine}${potentialsLine}`.trim();
+    } catch { this.contextFiltersText = null; }
   }
 
   private initializeElements() {
@@ -144,6 +175,15 @@ class CustomWheelOffsetChatWidget {
 
   private clearChatHistory() {
     if (!confirm('Are you sure you want to clear the chat history?')) return;
+    const run = () => new Promise<any>((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'CHAT_CLEAR' }, (res) => {
+        const lastErr = (chrome.runtime as any).lastError;
+        if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
+        resolve(res);
+      });
+    });
+
+    // Optimistically clear UI; background holds canonical state
     this.messages = [];
     this.chatMessages.innerHTML = `
       <div class="cwo-message assistant">
@@ -153,27 +193,27 @@ class CustomWheelOffsetChatWidget {
         <div class="cwo-message-time">${this.formatTime(new Date())}</div>
       </div>
     `;
-    this.saveChatHistory();
+    run().catch((e) => {
+      console.warn('Failed to clear chat in background:', e);
+    });
   }
 
   private loadChatHistory() {
-    try {
-      const raw = localStorage.getItem('cwo-chat-history');
-      if (!raw) return;
-      this.messages = JSON.parse(raw);
-      this.messages.forEach((m: any) => {
-        m.timestamp = new Date(m.timestamp);
-        this.renderMessage(m);
-      });
-      // After rendering prior messages, make sure the view is at the latest
+    // Fetch canonical state from background
+    chrome.runtime.sendMessage({ type: 'CHAT_STATE_GET' }, (res) => {
+      const lastErr = (chrome.runtime as any).lastError;
+      if (lastErr) { console.warn('CHAT_STATE_GET error:', lastErr.message); return; }
+      if (!res?.ok) { console.warn('CHAT_STATE_GET failed:', res?.error); return; }
+      const state = res.state as { messages: Array<{ role: string; content: string; ts: number }> };
+      const msgs = (state?.messages || []).filter((m) => m.role === 'user' || m.role === 'assistant');
+      this.messages = msgs.map((m) => ({ sender: m.role === 'user' ? 'user' : 'assistant', content: m.content, timestamp: new Date(m.ts) }));
+      this.messages.forEach((m) => this.renderMessage(m));
       this.scrollToBottom();
-    } catch (e) {
-      console.error('Error loading chat history:', e);
-    }
+    });
   }
 
   private saveChatHistory() {
-    try { localStorage.setItem('cwo-chat-history', JSON.stringify(this.messages)); } catch (e) { console.error(e); }
+    // State is persisted by background; keep as no-op to avoid divergence
   }
 
   private setWelcomeTime() {
@@ -252,11 +292,11 @@ class CustomWheelOffsetChatWidget {
       {
         id: 'apply_store_filters',
         name: 'Apply Store Filters',
-        description: 'Navigate to /store/wheels with selected filters, then extract results.',
+        description: 'Navigate to /store/wheels with selected filters, then extract results. Note: Model means Wheel Model, not vehicle model.',
         params: [
           { key: 'year', label: 'Year', type: 'string', optional: true },
           { key: 'make', label: 'Make', type: 'string', optional: true },
-          { key: 'model', label: 'Model', type: 'string', optional: true },
+          { key: 'model', label: 'Wheel Model', type: 'string', optional: true },
           { key: 'trim', label: 'Trim', type: 'string', optional: true },
           { key: 'drive', label: 'Drive', type: 'string', optional: true },
           { key: 'brand', label: 'Brand', type: 'string', optional: true },
@@ -543,7 +583,10 @@ class CustomWheelOffsetChatWidget {
     };
 
     const filters: Record<string, any> = {};
-    const keys = ['year','make','model','trim','drive','brand','dia','width','offset','bolt','mat','color','reviews','page','min','max','minWeight','maxWeight'];
+    const keys = [
+      'store','sort','saleToggle','qdToggle','suspension','modification','rubbing',
+      'year','make','model','wmodel','trim','drive','brand','dia','width','offset','bolt','mat','color','reviews','page','min','max','minWeight','maxWeight'
+    ];
     for (const k of keys) {
       const v = pick(k);
       if (v !== undefined) filters[k] = v;
@@ -557,11 +600,18 @@ class CustomWheelOffsetChatWidget {
     if (!tab || tab.id == null) throw new Error('No active tab');
     const baseUrl = new URL(tab.url || 'https://www.customwheeloffset.com/store/wheels');
     baseUrl.pathname = '/store/wheels';
-    const keys = ['year', 'make', 'model', 'trim', 'drive', 'dia', 'width', 'offset', 'brand', 'color', 'mat', 'reviews', 'bolt', 'page', 'price', 'weight', 'min', 'max', 'minWeight', 'maxWeight', 'price_min', 'price_max', 'weight_min', 'weight_max', 'wmin', 'wmax'];
+    const keys = ['year', 'make', 'model', 'wmodel', 'trim', 'drive', 'dia', 'width', 'offset', 'brand', 'color', 'mat', 'reviews', 'bolt', 'page', 'price', 'weight', 'min', 'max', 'minWeight', 'maxWeight', 'price_min', 'price_max', 'weight_min', 'weight_max', 'wmin', 'wmax'];
+    // Clear any existing params we manage (including old 'model' and new 'wmodel')
     keys.forEach((k) => baseUrl.searchParams.delete(k));
     for (const k of ['year', 'make', 'model', 'trim', 'drive', 'dia', 'width', 'offset', 'brand', 'color', 'mat', 'reviews', 'bolt', 'page']) {
-      const v = values[k];
-      if (v !== undefined && v !== null && String(v).trim() !== '') baseUrl.searchParams.set(k, String(v).trim());
+      let v = values[k];
+      let paramKey = k;
+      // Map 'model' tool arg to 'wmodel' query param (support either input key)
+      if (k === 'model') {
+        v = values['model'] ?? values['wmodel'];
+        paramKey = 'wmodel';
+      }
+      if (v !== undefined && v !== null && String(v).trim() !== '') baseUrl.searchParams.set(paramKey, String(v).trim());
     }
 
     // Price: site uses min/max for price
@@ -639,103 +689,52 @@ class CustomWheelOffsetChatWidget {
 
   // ---------- OpenAI function-calling chat ----------
   private async sendToChatGPT(userText: string): Promise<string> {
-    // Pull from settings first
-    const cfg: any = await new Promise((resolve) => chrome.storage.local.get('extensionConfig', (res) => resolve(res['extensionConfig'] || {})));
-    let apiKey = (cfg.openaiApiKey || '').trim();
-    let model = (cfg.openaiModel || '').trim();
-    // Fallback to dotenv-injected values at build time
-    if (!apiKey && (process as any).env && (process as any).env.OPENAI_API_KEY) apiKey = (process as any).env.OPENAI_API_KEY;
-    if (!model && (process as any).env && (process as any).env.OPENAI_MODEL) model = (process as any).env.OPENAI_MODEL;
-    if (!model) model = 'gpt-4o-mini';
-    if (!apiKey) return 'OpenAI API key is not set. Add it in Settings, or provide OPENAI_API_KEY via .env at build time.';
-
-    const toOpenAIMsgs = () => {
-      const msgs: any[] = [];
-      if (CWO_SYSTEM_PROMPT && CWO_SYSTEM_PROMPT.trim()) {
-        msgs.push({ role: 'system', content: CWO_SYSTEM_PROMPT.trim() });
-      }
-      for (const m of this.messages) msgs.push({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.content });
-      msgs.push({ role: 'user', content: userText });
-      return msgs;
-    };
-
-    const tools = this.getUnifiedTools().map((t) => {
-      const props: any = {};
-      for (const p of (t.params || [])) {
-        props[p.key] = { type: p.type === 'number' ? 'number' : 'string' };
-      }
-      return {
-        type: 'function',
-        function: {
-          name: t.id,
-          description: t.description,
-          parameters: { type: 'object', properties: props, additionalProperties: false },
-        },
-      } as any;
-    });
-
-    const callOpenAI = async (messages: any[]) => {
-      const body = { model, messages, tools, tool_choice: 'auto' } as any;
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(body)
+    // Background owns model calls & persistence per SCOPE.md
+    const send = (payload: any) => new Promise<any>((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'CHAT_SEND', ...payload }, (res) => {
+        const lastErr = (chrome.runtime as any).lastError;
+        if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
+        resolve(res);
       });
-      if (!resp.ok) throw new Error(`OpenAI error ${resp.status}: ${await resp.text()}`);
-      return await resp.json();
-    };
-
+    });
     const runTool = async (name: string, args: any) => {
       const t = this.getUnifiedTools().find((x) => x.id === name);
       if (!t) throw new Error(`Unknown tool: ${name}`);
       return await t.run(args || {});
     };
 
-    let messages = toOpenAIMsgs();
-    let data = await callOpenAI(messages);
-    let msg = data.choices?.[0]?.message;
-    if (!msg) return 'No response from model';
-
-    for (let i = 0; i < 3; i++) {
-      const toolCalls = msg.tool_calls || [];
-      if (!toolCalls.length) break;
-      const toolMsgs: any[] = [];
-      for (const tc of toolCalls) {
-        const fnName = tc.function?.name;
-        const argsStr = tc.function?.arguments || '{}';
-        let args: any = {};
-        try { args = JSON.parse(argsStr || '{}'); } catch {}
-        // Log tool call and parameters
-        try {
-          console.groupCollapsed(`[CWO Chat] Tool call requested: ${fnName}`);
-          console.log('Arguments:', args);
-          console.groupEnd();
-        } catch {}
-        const result = await runTool(fnName, args);
-        try {
-          console.groupCollapsed(`[CWO Chat] Tool result: ${fnName}`);
-          console.log('Result:', result);
-          console.groupEnd();
-        } catch {}
-        // The Chat Completions API requires tool message `content` to be a string.
-        // Ensure we never pass `undefined` (which would drop the field and 400).
-        let contentStr: string;
-        if (typeof result === 'string') {
-          contentStr = result;
-        } else {
-          try {
-            contentStr = JSON.stringify(result ?? null);
-          } catch {
-            contentStr = String(result);
-          }
+    // Initial send (userText + optional one-time systemContext)
+    const systemContext = this.contextFiltersText || undefined;
+    let res = await send(systemContext ? { userText, systemContext } : { userText });
+    // Use context only on the first turn
+    this.contextFiltersText = null;
+    if (!res?.ok) throw new Error(res?.error?.message || 'Chat error');
+    let assistant = res.assistant || '';
+    if (res.toolCalls && res.toolCalls.length) {
+      // Iterate up to 3 rounds to satisfy tools
+      for (let i = 0; i < 3; i++) {
+        const toolCalls: Array<{ id: string; name: string; arguments: any }> = res.toolCalls || [];
+        if (!toolCalls.length) break;
+        const toolMessages: Array<{ id: string; content: string }> = [];
+        for (const tc of toolCalls) {
+          const name = tc.name;
+          const args = tc.arguments || {};
+          try { console.groupCollapsed(`[CWO Chat] Tool call: ${name}`); console.log('Arguments:', args); console.groupEnd(); } catch {}
+          const result = await runTool(name, args);
+          let contentStr: string;
+          if (typeof result === 'string') contentStr = result;
+          else { try { contentStr = JSON.stringify(result ?? null); } catch { contentStr = String(result); } }
+          toolMessages.push({ id: tc.id, content: contentStr });
+          try { console.groupCollapsed(`[CWO Chat] Tool result: ${name}`); console.log('Result:', result); console.groupEnd(); } catch {}
         }
-        toolMsgs.push({ role: 'tool', tool_call_id: tc.id, content: contentStr });
+        // Send tool results back
+        res = await send({ toolMessages });
+        if (!res?.ok) throw new Error(res?.error?.message || 'Chat error');
+        assistant = res.assistant || assistant;
+        if (!res.toolCalls || !res.toolCalls.length) break;
       }
-      messages.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
-      messages.push(...toolMsgs);
-      data = await callOpenAI(messages);
-      msg = data.choices?.[0]?.message;
-      if (!msg) break;
     }
-    return msg?.content || 'Done.';
+    return assistant || 'Done.';
   }
 
   // ---------- Minimal Markdown renderer (safe) ----------
