@@ -1,9 +1,23 @@
 import { VehicleStorage } from './utils/vehicleStorage';
 import { ConfigService } from './services/configService';
+import OpenAI from 'openai';
+import { TOOL_DEFS } from './tools/tools';
+import type {
+  ChatCompletionCreateParams,
+  ChatCompletionMessageParam,
+  ChatCompletion,
+  ChatCompletionMessageToolCall,
+} from 'openai/resources/chat/completions';
 
 // ================= Chat Background (per SCOPE.md) =================
 type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
-interface ChatMsg { role: ChatRole; content: string; ts: number; tool_call_id?: string; tool_calls?: any[] }
+interface ChatMsg {
+  role: ChatRole;
+  content: string;
+  ts: number;
+  tool_call_id?: string;
+  tool_calls?: ChatCompletionMessageToolCall[];
+}
 interface SerializedError { message: string; stack?: string; code?: string }
 interface ChatState { messages: ChatMsg[]; lastError?: SerializedError; inFlight?: boolean }
 
@@ -28,68 +42,49 @@ async function setChatState(next: ChatState): Promise<void> {
   await chrome.storage.local.set({ [CHAT_STATE_KEY]: next });
 }
 
-function buildToolSchema() {
-  // Schema only; widget executes these tools.
-  type ParamDef = { type: 'string'|'number'; description?: string } | 'string' | 'number';
-  const defs: Array<{ name: string; description: string; params?: Record<string, ParamDef> }>= [
-    { name: 'get_store_data', description: 'Extract filters, products, and pagination from the current wheels store page. Call this after you run the `apply_store_filters` to figure out what is on the page.' },
-    { name: 'get_current_filters', description: 'Return current query-string filters for the store page.' },
-    { name: 'get_user_vehicle_data', description: "Return info about user's stored vehicle including imageCountThatCouldBeRenderedAsComposite." },
-    { name: 'apply_store_filters', description: 'Navigate to /store/wheels with selected filters, then extract results. If the filters already match the ones passed to you in the system message don\'t call this', params: {
-        year: 'string', make: 'string', model: { type: 'string', description: 'Wheel Model (not vehicle model)' }, trim: 'string', drive: 'string', brand: 'string', dia: 'string', width: 'string', offset: 'string', bolt: 'string', mat: 'string', color: 'string', price: 'string', min: 'number', max: 'number', weight: 'string', minWeight: 'number', maxWeight: 'number', reviews: 'number', page: 'number', price_min: 'number', price_max: 'number', weight_min: 'number', weight_max: 'number'
-      }
-    },
-    { name: 'generate_composite', description: 'Use stored vehicle polygons and product image to generate a composite image for a vehicle.', params: { imageIndex: 'number', productImage: 'string', productDescription: 'string' } },
-  ];
-  return defs.map((t) => ({
-    type: 'function',
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: {
-        type: 'object',
-        properties: Object.fromEntries(Object.entries(t.params || {}).map(([k, v]) => {
-          if (typeof v === 'string') return [k, { type: v }];
-          return [k, { type: v.type, ...(v.description ? { description: v.description } : {}) }];
-        })),
-        additionalProperties: false,
-      },
-    },
-  }));
-}
+// Tool schema now sourced from a single shared module
 
-async function callOpenAI(messages: Array<any>): Promise<any> {
+async function callOpenAI(messages: ChatCompletionMessageParam[]): Promise<ChatCompletion> {
   const cfg = await ConfigService.getOpenAI();
   if (!cfg) throw new Error('OpenAI API key is not set. Update it in Settings.');
   const { apiKey, model } = cfg;
-  const body: any = { model: model || 'gpt-4o-mini', messages, tools: buildToolSchema(), tool_choice: 'auto' };
+
+  const payload: ChatCompletionCreateParams = {
+    model: model || 'gpt-4o-mini',
+    messages,
+    tools: TOOL_DEFS,
+    tool_choice: 'auto',
+  };
+
   console.groupCollapsed('[CHAT BG] callOpenAI');
-  console.debug('model:', body.model, 'msgCount:', (messages || []).length);
+  console.debug('model:', payload.model, 'msgCount:', (messages || []).length);
   const last = messages[messages.length - 1];
-  console.debug('lastMsgRole:', last?.role, 'hasToolCalls:', Array.isArray(last?.tool_calls) && last.tool_calls.length > 0);
+  let hasToolCalls = false;
+  if (last && last.role === 'assistant') {
+    const a = last as Extract<ChatCompletionMessageParam, { role: 'assistant' }>;
+    hasToolCalls = Array.isArray(a.tool_calls) && a.tool_calls.length > 0;
+  }
+  console.debug('lastMsgRole:', last?.role, 'hasToolCalls:', hasToolCalls);
   console.groupEnd();
+
   currentAbort = new AbortController();
-  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-    signal: currentAbort.signal,
-  });
-  if (!resp.ok) throw new Error(`OpenAI error ${resp.status}: ${await resp.text()}`);
-  return await resp.json();
+
+  // Use official OpenAI client (Chat Completions)
+  const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+  const data = await openai.chat.completions.create(payload, { signal: currentAbort.signal });
+  return data;
 }
 
-function toApiMessages(state: ChatState, includeSystem = true): any[] {
-  const msgs: any[] = [];
+function toApiMessages(state: ChatState, includeSystem = true): ChatCompletionMessageParam[] {
+  const msgs: ChatCompletionMessageParam[] = [];
   if (includeSystem && CWO_SYSTEM_PROMPT && CWO_SYSTEM_PROMPT.trim()) {
-    msgs.push({ role: 'system', content: CWO_SYSTEM_PROMPT.trim() });
+    msgs.push({ role: 'system', content: CWO_SYSTEM_PROMPT.trim() } as const);
   }
   let expectingTool = false;
   for (const m of state.messages) {
     if (m.role === 'assistant') {
-      const out: any = { role: 'assistant', content: m.content };
+      const out = { role: 'assistant', content: m.content, tool_calls: m.tool_calls } as const;
       if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
-        out.tool_calls = m.tool_calls;
         expectingTool = true;
       } else {
         expectingTool = false;
@@ -98,10 +93,12 @@ function toApiMessages(state: ChatState, includeSystem = true): any[] {
     } else if (m.role === 'tool') {
       // Only include tool messages when immediately following an assistant message with tool_calls
       if (!expectingTool) continue;
-      msgs.push({ role: 'tool', content: m.content, tool_call_id: m.tool_call_id });
+      if (!m.tool_call_id) continue; // tool messages must include tool_call_id
+      msgs.push({ role: 'tool', content: m.content, tool_call_id: m.tool_call_id } as const);
     } else {
       expectingTool = false;
-      msgs.push({ role: m.role, content: m.content });
+      if (m.role === 'system') msgs.push({ role: 'system', content: m.content } as const);
+      else if (m.role === 'user') msgs.push({ role: 'user', content: m.content } as const);
     }
   }
   return msgs;
@@ -116,7 +113,7 @@ function pendingToolCallIds(state: ChatState): string[] {
   }
   if (idx === -1) return [];
   const assistant = state.messages[idx];
-  const required = new Set<string>((assistant.tool_calls || []).map((tc: any) => tc.id));
+  const required = new Set<string>((assistant.tool_calls || []).map((tc) => tc.id));
   // Collect following tool messages and mark fulfilled ids
   const seenTools: string[] = [];
   for (let j = idx + 1; j < state.messages.length; j++) {
@@ -128,7 +125,7 @@ function pendingToolCallIds(state: ChatState): string[] {
 
     console.groupCollapsed('[CHAT BG] pendingToolCallIds');
     console.debug('assistantIndex:', idx);
-    console.debug('assistantToolCallIds:', (assistant.tool_calls || []).map((tc: any) => tc.id));
+    console.debug('assistantToolCallIds:', (assistant.tool_calls || []).map((tc) => tc.id));
     console.debug('consecutiveToolMessageIds:', seenTools);
     console.debug('missingIds:', Array.from(required));
     console.groupEnd();
@@ -136,7 +133,7 @@ function pendingToolCallIds(state: ChatState): string[] {
   return Array.from(required);
 }
 
-function getPendingToolCalls(state: ChatState): Array<{ id: string; name: string; arguments: any }> {
+function getPendingToolCalls(state: ChatState): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
   // Find last assistant with tool_calls
   let idx = -1;
   for (let i = state.messages.length - 1; i >= 0; i--) {
@@ -146,14 +143,15 @@ function getPendingToolCalls(state: ChatState): Array<{ id: string; name: string
   if (idx === -1) return [];
   const assistant = state.messages[idx];
   const missing = new Set<string>(pendingToolCallIds(state));
-  const out: Array<{ id: string; name: string; arguments: any }> = [];
+  const out: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
   for (const tc of (assistant.tool_calls || [])) {
     const id = tc.id;
     if (!missing.has(id)) continue;
     const name = tc.function?.name;
     const rawArgs = tc.function?.arguments || '{}';
-    let parsed: any;
-    try { parsed = JSON.parse(rawArgs); } catch (e) { console.error('[CHAT BG] Failed parsing pending tool arguments:', rawArgs, e); parsed = rawArgs; }
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(rawArgs) as Record<string, unknown>; }
+    catch (e) { console.error('[CHAT BG] Failed parsing pending tool arguments:', rawArgs, e); parsed = {}; }
     out.push({ id, name, arguments: parsed });
   }
   console.groupCollapsed('[CHAT BG] getPendingToolCalls');
@@ -283,7 +281,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           let apiMsgs = toApiMessages(state, true);
           // Inject transient system context immediately after base system prompt (not persisted)
           if (systemContext && String(systemContext).trim()) {
-            const sysMsg = { role: 'system', content: String(systemContext).trim() };
+            const sysMsg = { role: 'system', content: String(systemContext).trim() } as const;
             if (apiMsgs.length && apiMsgs[0]?.role === 'system') apiMsgs.splice(1, 0, sysMsg); else apiMsgs.unshift(sysMsg);
           }
           const data = await callOpenAI(apiMsgs);
@@ -295,19 +293,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
           state.inFlight = false; await setChatState(state);
 
-          const toolCalls = (msg?.tool_calls || []).map((tc: any) => {
+          const toolCalls = (msg?.tool_calls || []).map((tc: ChatCompletionMessageToolCall) => {
             const rawArgs = tc.function?.arguments || '{}';
-            let parsed: any;
-            try {
-              parsed = JSON.parse(rawArgs);
-            } catch (e) {
-              console.error('[CHAT BG] Failed parsing tool arguments:', rawArgs, e);
-              parsed = rawArgs;
-            }
+            let parsed: Record<string, unknown> = {};
+            try { parsed = JSON.parse(rawArgs) as Record<string, unknown>; }
+            catch (e) { console.error('[CHAT BG] Failed parsing tool arguments:', rawArgs, e); parsed = {}; }
             return { id: tc.id, name: tc.function?.name, arguments: parsed };
           });
           console.groupCollapsed('[CHAT BG] CHAT_SEND OpenAI response');
-          console.debug('assistantTextLen:', assistantText.length, 'toolCalls:', toolCalls.map((t:any) => `${t.name}:${t.id}`));
+          console.debug('assistantTextLen:', assistantText.length, 'toolCalls:', toolCalls.map((t) => `${t.name}:${t.id}`));
           console.groupEnd();
 
           sendResponse({ ok: true, assistant: assistantText, toolCalls, state });

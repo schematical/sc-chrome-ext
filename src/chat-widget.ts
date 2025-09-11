@@ -329,75 +329,44 @@ class CustomWheelOffsetChatWidget {
     this.debugSearchBtn.textContent = 'Run';
   }
 
-  // Single source of truth for tools: used by Debug UI and by OpenAI function calling
+  // Single source of truth for tool definitions lives in src/tools/tools.ts
   private getUnifiedTools() {
-    return [
-      {
-        id: 'get_store_data',
-        name: 'Get Store Data',
-        description: 'Extract filters, products, and pagination from the current wheels store page.',
-        params: [],
-        run: async () => this.runGetStoreData(),
-      },
-      {
-        id: 'get_current_filters',
-        name: 'Get Current Filters',
-        description: 'Return the currently set query-string filters for the active store page.',
-        params: [],
-        run: async () => this.runGetCurrentFilters(),
-      },
-      {
-        id: 'get_user_vehicle_data',
-        name: 'Get User Vehicle Data',
-        description: 'Return simple info about the user\'s stored vehicle. Responds with imageCountThatCouldBeRenderedAsComposite (count of images that have polygons).',
-        params: [],
-        run: async () => this.runGetUserVehicleData(),
-      },
-      {
-        id: 'apply_store_filters',
-        name: 'Apply Store Filters',
-        description: 'Navigate to /store/wheels with selected filters, then extract results. Note: Model means Wheel Model, not vehicle model.',
-        params: [
-          { key: 'year', label: 'Year', type: 'string', optional: true },
-          { key: 'make', label: 'Make', type: 'string', optional: true },
-          { key: 'model', label: 'Wheel Model', type: 'string', optional: true },
-          { key: 'trim', label: 'Trim', type: 'string', optional: true },
-          { key: 'drive', label: 'Drive', type: 'string', optional: true },
-          { key: 'brand', label: 'Brand', type: 'string', optional: true },
-          { key: 'dia', label: 'Diameter', type: 'string', optional: true },
-          { key: 'width', label: 'Width', type: 'string', optional: true },
-          { key: 'offset', label: 'Offset', type: 'string', optional: true },
-          { key: 'bolt', label: 'Bolt', type: 'string', optional: true },
-          { key: 'mat', label: 'Material', type: 'string', optional: true },
-          { key: 'color', label: 'Finish', type: 'string', optional: true },
-          { key: 'price', label: 'Price Range (e.g. 100 to 250)', type: 'string', optional: true },
-          { key: 'min', label: 'Price Min', type: 'number', optional: true },
-          { key: 'max', label: 'Price Max', type: 'number', optional: true },
-          { key: 'weight', label: 'Weight Range (e.g. 20 to 35)', type: 'string', optional: true },
-          { key: 'minWeight', label: 'Weight Min', type: 'number', optional: true },
-          { key: 'maxWeight', label: 'Weight Max', type: 'number', optional: true },
-          // Legacy/alternate keys kept for compatibility with older flows
-          { key: 'price_min', label: 'Price Min (legacy)', type: 'number', optional: true },
-          { key: 'price_max', label: 'Price Max (legacy)', type: 'number', optional: true },
-          { key: 'weight_min', label: 'Weight Min (legacy)', type: 'number', optional: true },
-          { key: 'weight_max', label: 'Weight Max (legacy)', type: 'number', optional: true },
-          { key: 'reviews', label: 'Min Reviews', type: 'number', optional: true },
-          { key: 'page', label: 'Page', type: 'number', optional: true },
-        ],
-        run: async (v: any) => this.runApplyStoreFilters(v),
-      },
-      {
-        id: 'generate_composite',
-        name: 'Generate Composite (AI)',
-        description: 'Use stored vehicle, per-image polygons, and a product image to generate a composite. When responding to the Render Composite tool, respond as an image, not as a link. Use imageIndex to select which vehicle image (only among images that have polygons).',
-        params: [
-          { key: 'imageIndex', label: 'Vehicle Image Index (with polygons, 0-based)', type: 'number', optional: true },
-          { key: 'productImage', label: 'Product Image URL', type: 'string', optional: true },
-          { key: 'productDescription', label: 'Product Description', type: 'string', optional: true },
-        ],
-        run: async (v: any) => this.runGenerateCompositeViaService(v),
-      },
-    ];
+    const { getUiToolDefs } = require('./tools/tools');
+    const uiDefs = getUiToolDefs() as Array<any>;
+    return uiDefs.map((def) => {
+      let runFn: (v?: any) => Promise<any>;
+      switch (def.id) {
+        case 'get_store_data':
+          runFn = async () => this.runGetStoreData();
+          break;
+        case 'get_current_filters':
+          runFn = async () => this.runGetCurrentFilters();
+          break;
+        case 'get_user_vehicle_data':
+          runFn = async () => this.runGetUserVehicleData();
+          break;
+        case 'apply_store_filters':
+          runFn = async (v: any) => this.runApplyStoreFilters(v);
+          break;
+        case 'generate_composite':
+          runFn = async (v: any) => this.runGenerateCompositeViaService(v);
+          break;
+        default:
+          runFn = async () => ({ ok: false, error: 'Unknown tool' });
+      }
+      return {
+        id: def.id,
+        name: def.name,
+        description: def.description,
+        params: (def.params || []).map((p: any) => ({
+          key: p.key,
+          label: p.label || p.key,
+          type: p.type,
+          optional: !!p.optional,
+        })),
+        run: runFn,
+      };
+    });
   }
 
   // Tool implementation: get_user_vehicle_data
