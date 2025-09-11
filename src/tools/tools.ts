@@ -1,7 +1,10 @@
 // src/tools/tools.ts
 
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
-
+const SPLIT_PARAM_INSTRUCTIONS = "This should be a list of the values you get from calling `get_store_data` seperated delineated by `'` a single quote."
+// Apostrophe-delimited signed numbers (integers or decimals), no spaces.
+// Valid: "1'2'-3'4.5", "-1'0'3.1415", "+2.0'-0.5"
+export const APOSTROPHE_NUM_LIST_PATTERN = "^[+-]?\\d+(?:\\.\\d+)?(?:'[+-]?\\d+(?:\\.\\d+)?)*$";
 // Export tool definitions directly in ChatCompletionTool schema
 export const TOOL_DEFS: ChatCompletionTool[] = [
   {
@@ -46,9 +49,9 @@ export const TOOL_DEFS: ChatCompletionTool[] = [
           trim: { type: 'string' },
           drive: { type: 'string' },
           brand: { type: 'string' },
-          dia: { type: 'string', description: 'Diameter (e.g., 20)' },
-          width: { type: 'string', description: 'Width (e.g., 9 or 9.5)' },
-          offset: { type: 'string', description: 'Offset (e.g., +35, -12)' },
+          dia: { type: 'string', description: `Diameter - ${SPLIT_PARAM_INSTRUCTIONS}`, pattern: APOSTROPHE_NUM_LIST_PATTERN },
+          width: { type: 'string', description: `Width - ${SPLIT_PARAM_INSTRUCTIONS}`, pattern: APOSTROPHE_NUM_LIST_PATTERN },
+          offset: { type: 'string', description: `Offset - ${SPLIT_PARAM_INSTRUCTIONS}`, pattern: APOSTROPHE_NUM_LIST_PATTERN },
           bolt: { type: 'string', description: 'Bolt pattern (e.g., 5x114.3)' },
           mat: { type: 'string', description: 'Material/finish' },
           color: { type: 'string' },
