@@ -47,21 +47,27 @@ class CustomWheelOffsetChatWidget {
   }
 
   private async resumePendingToolCalls() {
-    const send = (payload: any) => new Promise<any>((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'CHAT_INIT', ...payload }, (res) => {
-        const lastErr = (chrome.runtime as any).lastError;
-        if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
-        resolve(res);
+    const send = async (payload: any) => {
+      const systemContext = await this.buildSystemContext();
+      return new Promise<any>((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'CHAT_INIT', ...payload }, (res) => {
+          const lastErr = (chrome.runtime as any).lastError;
+          if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
+          resolve(res);
+        });
       });
-    });
+    };
 
-    const toSend = (payload: any) => new Promise<any>((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'CHAT_SEND', ...payload }, (res) => {
-        const lastErr = (chrome.runtime as any).lastError;
-        if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
-        resolve(res);
+    const toSend = async (payload: any) => {
+      const systemContext = await this.buildSystemContext();
+      return new Promise<any>((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'CHAT_SEND', ...(systemContext ? { systemContext } : {}), ...payload }, (res) => {
+          const lastErr = (chrome.runtime as any).lastError;
+          if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
+          resolve(res);
+        });
       });
-    });
+    };
 
     const runTool = async (name: string, args: any) => {
       const t = this.getUnifiedTools().find((x) => x.id === name);
@@ -747,24 +753,24 @@ class CustomWheelOffsetChatWidget {
   // ---------- OpenAI function-calling chat ----------
   private async sendToChatGPT(userText: string): Promise<string> {
     // Background owns model calls & persistence per SCOPE.md
-    const send = (payload: any) => new Promise<any>((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'CHAT_SEND', ...payload }, (res) => {
-        const lastErr = (chrome.runtime as any).lastError;
-        if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
-        resolve(res);
+    const send = async (payload: any) => {
+      const systemContext = await this.buildSystemContext();
+      return new Promise<any>((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'CHAT_SEND', ...(systemContext ? { systemContext } : {}), ...payload }, (res) => {
+          const lastErr = (chrome.runtime as any).lastError;
+          if (lastErr) return reject(new Error(`Background error: ${lastErr.message}`));
+          resolve(res);
+        });
       });
-    });
+    };
     const runTool = async (name: string, args: any) => {
       const t = this.getUnifiedTools().find((x) => x.id === name);
       if (!t) throw new Error(`Unknown tool: ${name}`);
       return await t.run(args || {});
     };
 
-    // Initial send (userText + optional one-time systemContext)
-    const systemContext = this.contextFiltersText || undefined;
-    let res = await send(systemContext ? { userText, systemContext } : { userText });
-    // Use context only on the first turn
-    this.contextFiltersText = null;
+    // Initial send (always include latest systemContext built from get_store_data)
+    let res = await send({ userText });
     if (!res?.ok) throw new Error(res?.error?.message || 'Chat error');
     let assistant = res.assistant || '';
     if (res.toolCalls && res.toolCalls.length) {
@@ -792,6 +798,15 @@ class CustomWheelOffsetChatWidget {
       }
     }
     return assistant || 'Done.';
+  }
+
+  private async buildSystemContext(): Promise<string | undefined> {
+
+      const storeData = await this.runGetStoreData();
+      // Avoid blowing up tokens; cap to ~8k chars but keep structure
+      const raw = JSON.stringify(storeData);
+
+      return storeData; // `current page options and data: ${raw}`;
   }
 
   // ---------- Minimal Markdown renderer (safe) ----------

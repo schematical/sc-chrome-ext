@@ -1,7 +1,8 @@
 // src/tools/tools.ts
 
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
-const SPLIT_PARAM_INSTRUCTIONS = "This should be a list of the values you get from calling `get_store_data` seperated delineated by `'` a single quote."
+// const SPLIT_PARAM_INSTRUCTIONS = "This should be a list of the values you get from calling `get_store_data` seperated delineated by `'` a single quote. "
+const SPLIT_PARAM_INSTRUCTIONS = "Pass in a comprehensive list of the values you get from the system prompt seperated delineated by `'` a single quote. So if you wanted a range of -20 to -25 it would be `-20'-21'-22'-23'-24'-25`."
 // Apostrophe-delimited signed numbers (integers or decimals), no spaces.
 // Valid: "1'2'-3'4.5", "-1'0'3.1415", "+2.0'-0.5"
 export const APOSTROPHE_NUM_LIST_PATTERN = "^[+-]?\\d+(?:\\.\\d+)?(?:'[+-]?\\d+(?:\\.\\d+)?)*$";
