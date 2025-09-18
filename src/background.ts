@@ -50,7 +50,7 @@ async function callOpenAI(messages: ChatCompletionMessageParam[]): Promise<ChatC
   const { apiKey, model } = cfg;
 
   const payload: ChatCompletionCreateParams = {
-    model: model || 'gpt-4o-mini',
+    model: model || 'gpt-4o-nano',
     messages,
     tools: TOOL_DEFS,
     tool_choice: 'auto',

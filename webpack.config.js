@@ -26,7 +26,8 @@ module.exports = (env, argv) => {
         customWheelOffsetWidget: path.resolve(__dirname, 'src', 'content-scripts', 'customWheelOffsetWidget.ts'),
         customWheelOffsetStoreExtractor: path.resolve(__dirname, 'src', 'content-scripts', 'customWheelOffsetStoreExtractor.ts'),
         'chat-widget': path.resolve(__dirname, 'src', 'chat-widget.ts'),
-        debug: path.resolve(__dirname, 'src', 'debug.ts')
+        debug: path.resolve(__dirname, 'src', 'debug.ts'),
+        vehicleStorage: path.resolve(__dirname, 'src', 'utils', 'vehicleStorage.ts')
     };
 
     return {
