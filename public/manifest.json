@@ -22,7 +22,8 @@
         "main.js"
       ],
       "matches": [
-        "https://*.console.aws.amazon.com/*"
+         "https://*/*",
+        "http://*/*"
       ],
       "run_at": "document_end"
     }
