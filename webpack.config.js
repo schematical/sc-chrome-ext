@@ -10,7 +10,15 @@ const entryPoints = {
         path.resolve(__dirname, 'scss', 'main.scss')
     ],
     menu:  path.resolve(__dirname, 'src', 'menu.ts'),
-    background: path.resolve(__dirname, 'src', 'background.ts')
+    background: path.resolve(__dirname, 'src', 'background.ts'),
+    chat: [
+        path.resolve(__dirname, 'src', 'chat.ts'),
+        path.resolve(__dirname, 'scss', 'chat.scss')
+    ],
+    settings: [
+        path.resolve(__dirname, 'src', 'settings.ts'),
+        path.resolve(__dirname, 'scss', 'settings.scss')
+    ]
 };
 
 module.exports = {

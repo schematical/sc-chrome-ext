@@ -12,14 +12,33 @@ interface AgentDiscoveryResult {
     label: string;
     url: string;
     preview: string;
+    data: AgentDescriptorData;
+}
+
+interface AgentDescriptorData {
+    rawText?: string;
+    json?: unknown;
+}
+
+interface DiscoveredAgent {
+    agentId: string;
+    name: string;
+    description?: string;
+    sourceId: string;
+    descriptorUrl: string;
+    payload: unknown;
 }
 
 interface AgentDiscoveryCacheEntry {
     checkedAt: number;
-    results: AgentDiscoveryResult[];
+    descriptors: AgentDiscoveryResult[];
+    agents: DiscoveredAgent[];
 }
 
 type AgentDiscoveryCache = Record<string, AgentDiscoveryCacheEntry>;
+
+type AgentToggleState = Record<string, boolean>;
+type AgentToggleStore = Record<string, AgentToggleState>;
 
 class AgentDiscovery {
     private readonly endpoints: AgentEndpoint[] = [
@@ -31,11 +50,16 @@ class AgentDiscovery {
     ];
 
     private readonly cacheKey = 'schematicalAgentCache';
+    private readonly toggleStorageKey = 'schematicalAgentToggles';
     private readonly ttlMs = 24 * 60 * 60 * 1000;
     private hasRendered = false;
 
     private isScanning = false;
     private forceOpenOnNextRender = false;
+    private currentHostKey: string | null = null;
+    private currentOrigin: string | null = null;
+    private currentAgents: DiscoveredAgent[] = [];
+    private currentToggleState: AgentToggleState = {};
 
     public async run(options: { force?: boolean } = {}): Promise<void> {
         const { force = false } = options;
@@ -49,16 +73,24 @@ class AgentDiscovery {
             return;
         }
 
+        this.currentHostKey = hostKey;
+
         const origin = window.location.origin;
         if (!origin || origin === 'null') {
             return;
         }
 
+        this.currentOrigin = origin;
+
         const cachedResults = force ? null : await this.loadCachedResults(hostKey);
         if (cachedResults !== null) {
             this.hasRendered = true;
             this.injectStyles();
-            this.renderFooter(cachedResults);
+            const cachedAgents = cachedResults.agents ?? [];
+            this.currentAgents = cachedAgents;
+            await this.syncToggleState(hostKey, cachedAgents);
+            this.renderFooter(cachedResults.descriptors ?? [], cachedAgents);
+            void this.notifyBackground(hostKey, origin, cachedResults.descriptors ?? [], cachedAgents, this.currentToggleState);
             return;
         }
 
@@ -66,14 +98,19 @@ class AgentDiscovery {
             (value): value is AgentDiscoveryResult => Boolean(value)
         );
 
-        await this.saveResults(hostKey, results);
+        const agents = this.deriveAgents(results);
+        this.currentAgents = agents;
+
+        await this.syncToggleState(hostKey, agents);
+        await this.saveResults(hostKey, results, agents);
 
         this.hasRendered = true;
         this.injectStyles();
-        this.renderFooter(results);
+        this.renderFooter(results, agents);
+        void this.notifyBackground(hostKey, origin, results, agents, this.currentToggleState);
     }
 
-    private async loadCachedResults(hostKey: string): Promise<AgentDiscoveryResult[] | null> {
+    private async loadCachedResults(hostKey: string): Promise<AgentDiscoveryCacheEntry | null> {
         try {
             const storage = await chrome.storage.local.get(this.cacheKey);
             const cache: AgentDiscoveryCache = storage[this.cacheKey] ?? {};
@@ -90,21 +127,22 @@ class AgentDiscovery {
                 return null;
             }
 
-            return entry.results;
+            return entry;
         } catch (error) {
             console.debug('[Schematical] unable to read agent cache', error);
             return null;
         }
     }
 
-    private async saveResults(hostKey: string, results: AgentDiscoveryResult[]): Promise<void> {
+    private async saveResults(hostKey: string, descriptors: AgentDiscoveryResult[], agents: DiscoveredAgent[]): Promise<void> {
         try {
             const storage = await chrome.storage.local.get(this.cacheKey);
             const cache: AgentDiscoveryCache = storage[this.cacheKey] ?? {};
 
             cache[hostKey] = {
                 checkedAt: Date.now(),
-                results
+                descriptors,
+                agents
             };
 
             await chrome.storage.local.set({ [this.cacheKey]: cache });
@@ -130,28 +168,162 @@ class AgentDiscovery {
             }
 
             let preview: string;
+            const data: AgentDescriptorData = {};
             if (endpoint.expectsJson) {
                 try {
                     const json = await response.json();
                     preview = this.formatJsonPreview(json);
+                    data.json = json;
+                    data.rawText = JSON.stringify(json);
                 } catch (jsonError) {
                     const text = await response.text();
                     preview = this.buildPreview(text);
+                    data.rawText = text;
                 }
             } else {
                 const text = await response.text();
                 preview = this.buildPreview(text);
+                data.rawText = text;
             }
 
             return {
                 id: endpoint.id,
                 label: endpoint.label,
                 url,
-                preview
+                preview,
+                data
             };
         } catch (error) {
             console.debug('[Schematical] Unable to read agent descriptor', { endpoint: endpoint.path, error });
             return null;
+        }
+    }
+
+    private deriveAgents(descriptors: AgentDiscoveryResult[]): DiscoveredAgent[] {
+        const agents: DiscoveredAgent[] = [];
+
+        descriptors.forEach((descriptor) => {
+            const sourceId = descriptor.id;
+            const payload = descriptor.data.json;
+
+            if (!payload || typeof payload !== 'object') {
+                return;
+            }
+
+            const container = payload as Record<string, unknown>;
+
+            const agentCollection = Array.isArray(container.agents)
+                ? (container.agents as Array<unknown>)
+                : undefined;
+            if (agentCollection) {
+                agentCollection.forEach((entry, index) => {
+                    if (!entry || typeof entry !== 'object') {
+                        return;
+                    }
+
+                    const agentRecord = entry as Record<string, unknown>;
+                    const agentId = this.normaliseAgentId(agentRecord['id'], `${sourceId}-${index}`);
+                    agents.push({
+                        agentId,
+                        name: this.resolveAgentName(agentRecord, agentId),
+                        description: this.resolveAgentDescription(agentRecord),
+                        sourceId,
+                        descriptorUrl: descriptor.url,
+                        payload: agentRecord
+                    });
+                });
+                return;
+            }
+
+            const skillCollection = Array.isArray(container.skills)
+                ? (container.skills as Array<unknown>)
+                : undefined;
+            if (skillCollection) {
+                skillCollection.forEach((entry, index) => {
+                    if (!entry || typeof entry !== 'object') {
+                        return;
+                    }
+
+                    const skillRecord = entry as Record<string, unknown>;
+                    const agentId = this.normaliseAgentId(skillRecord['id'], `${sourceId}-skill-${index}`);
+                    agents.push({
+                        agentId,
+                        name: this.resolveAgentName(skillRecord, agentId),
+                        description: this.resolveAgentDescription(skillRecord),
+                        sourceId,
+                        descriptorUrl: descriptor.url,
+                        payload: skillRecord
+                    });
+                });
+                return;
+            }
+
+            const singleAgentCandidate = payload as Record<string, unknown>;
+            if (singleAgentCandidate && (typeof singleAgentCandidate.id === 'string' || typeof singleAgentCandidate.name === 'string')) {
+                const agentId = this.normaliseAgentId(singleAgentCandidate['id'], `${sourceId}-primary`);
+                agents.push({
+                    agentId,
+                    name: this.resolveAgentName(singleAgentCandidate, agentId),
+                    description: this.resolveAgentDescription(singleAgentCandidate),
+                    sourceId,
+                    descriptorUrl: descriptor.url,
+                    payload: singleAgentCandidate
+                });
+            }
+        });
+
+        return agents;
+    }
+
+    private normaliseAgentId(candidate: unknown, fallback: string): string {
+        return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : fallback;
+    }
+
+    private resolveAgentName(agent: Record<string, unknown>, fallback: string): string {
+        const name = agent['name'];
+        if (typeof name === 'string' && name.trim()) {
+            return name.trim();
+        }
+        const title = agent['title'];
+        if (typeof title === 'string' && title.trim()) {
+            return title.trim();
+        }
+        return fallback;
+    }
+
+    private resolveAgentDescription(agent: Record<string, unknown>): string | undefined {
+        const description = agent['description'];
+        if (typeof description === 'string' && description.trim()) {
+            return description.trim();
+        }
+        const summary = agent['summary'];
+        if (typeof summary === 'string' && summary.trim()) {
+            return summary.trim();
+        }
+        return undefined;
+    }
+
+    private async notifyBackground(
+        hostKey: string,
+        origin: string,
+        descriptors: AgentDiscoveryResult[],
+        agents: DiscoveredAgent[],
+        toggles: AgentToggleState
+    ): Promise<void> {
+        try {
+            await chrome.runtime.sendMessage({
+                type: 'AGENT_DISCOVERY_UPDATE',
+                payload: {
+                    host: hostKey,
+                    origin,
+                    descriptors,
+                    agents,
+                    toggles
+                }
+            });
+        } catch (error) {
+            // Service worker might be sleeping; log softly.
+            console.debug('[Schematical] background update failed', error);
         }
     }
 
@@ -253,8 +425,62 @@ class AgentDiscovery {
             .schematical-agent-footer__scanBtn:not([disabled]):hover {
                 background: #1d4ed8;
             }
+            .schematical-agent-footer__agents {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                margin-bottom: 16px;
+            }
+            .schematical-agent-footer__agentItem {
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 8px;
+                padding: 10px 12px;
+                background: rgba(241, 245, 249, 0.65);
+            }
+            .schematical-agent-footer__agentHeader {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                margin-bottom: 6px;
+            }
+            .schematical-agent-footer__agentName {
+                font-size: 13px;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            .schematical-agent-footer__agentToggle {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                color: #0f172a;
+                cursor: pointer;
+            }
+            .schematical-agent-footer__agentToggle input {
+                accent-color: #2563eb;
+                cursor: pointer;
+            }
+            .schematical-agent-footer__agentToggleLabel {
+                font-weight: 500;
+            }
+            .schematical-agent-footer__agentDescription {
+                font-size: 12px;
+                margin: 0 0 4px;
+                color: #1f2937;
+            }
+            .schematical-agent-footer__agentMeta {
+                font-size: 11px;
+                color: #64748b;
+                margin: 0;
+            }
             .schematical-agent-footer__item + .schematical-agent-footer__item {
                 margin-top: 12px;
+            }
+            .schematical-agent-footer__descriptors {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
             }
             .schematical-agent-footer__empty {
                 font-size: 12px;
@@ -288,10 +514,9 @@ class AgentDiscovery {
         document.head.append(style);
     }
 
-    private renderFooter(results: AgentDiscoveryResult[]): void {
-        if (document.querySelector('.schematical-agent-footer')) {
-            return;
-        }
+    private renderFooter(descriptorsInput: AgentDiscoveryResult[] | undefined, agentsInput: DiscoveredAgent[] | undefined): void {
+        const descriptors = Array.isArray(descriptorsInput) ? descriptorsInput : [];
+        const agents = Array.isArray(agentsInput) ? agentsInput : [];
 
         let footer = document.querySelector<HTMLDivElement>('.schematical-agent-footer');
         const wasOpen = footer?.classList.contains('schematical-agent-footer--open') ?? false;
@@ -339,7 +564,16 @@ class AgentDiscovery {
             }
         }
 
-        const label = results.length ? `Agents detected (${results.length})` : 'Agent discovery ran – no descriptors found';
+        const agentCount = agents.length;
+        const descriptorCount = descriptors.length;
+        let label: string;
+        if (agentCount) {
+            label = `Agents detected (${agentCount})`;
+        } else if (descriptorCount) {
+            label = `Descriptors found (${descriptorCount})`;
+        } else {
+            label = 'Agent discovery ran – no descriptors found';
+        }
         toggle.innerHTML = `${label} <span class="schematical-agent-footer__arrow">▾</span>`;
 
         body.innerHTML = '';
@@ -359,37 +593,98 @@ class AgentDiscovery {
         actions.append(scanButton);
         body.append(actions);
 
-        if (!results.length) {
-            const emptyState = document.createElement('p');
-            emptyState.className = 'schematical-agent-footer__empty';
-            emptyState.textContent = 'No agent descriptors found on this domain in the last 24 hours.';
-            body.append(emptyState);
+        const agentSection = document.createElement('div');
+        agentSection.className = 'schematical-agent-footer__agents';
+
+        if (agents.length) {
+            agents.forEach((agent) => {
+                const agentItem = document.createElement('div');
+                agentItem.className = 'schematical-agent-footer__agentItem';
+
+                const header = document.createElement('div');
+                header.className = 'schematical-agent-footer__agentHeader';
+
+                const name = document.createElement('span');
+                name.className = 'schematical-agent-footer__agentName';
+                name.textContent = agent.name;
+
+                const toggleWrapper = document.createElement('label');
+                toggleWrapper.className = 'schematical-agent-footer__agentToggle';
+
+                const toggleInput = document.createElement('input');
+                toggleInput.type = 'checkbox';
+                const enabled = this.currentToggleState[agent.agentId] === true;
+                toggleInput.checked = enabled;
+
+                const toggleLabel = document.createElement('span');
+                toggleLabel.className = 'schematical-agent-footer__agentToggleLabel';
+                toggleLabel.textContent = enabled ? 'Enabled' : 'Disabled';
+
+                toggleInput.addEventListener('change', () => {
+                    const isEnabled = toggleInput.checked;
+                    toggleLabel.textContent = isEnabled ? 'Enabled' : 'Disabled';
+                    void this.handleAgentToggle(agent, isEnabled);
+                });
+
+                toggleWrapper.append(toggleInput, toggleLabel);
+                header.append(name, toggleWrapper);
+
+                agentItem.append(header);
+
+                if (agent.description) {
+                    const description = document.createElement('p');
+                    description.className = 'schematical-agent-footer__agentDescription';
+                    description.textContent = agent.description;
+                    agentItem.append(description);
+                }
+
+                const meta = document.createElement('p');
+                meta.className = 'schematical-agent-footer__agentMeta';
+                meta.textContent = `Source: ${agent.sourceId}`;
+                agentItem.append(meta);
+
+                agentSection.append(agentItem);
+            });
         } else {
-            results.forEach((result) => {
+            const emptyAgents = document.createElement('p');
+            emptyAgents.className = 'schematical-agent-footer__empty';
+            emptyAgents.textContent = 'No agents discovered on this domain in the last 24 hours.';
+            agentSection.append(emptyAgents);
+        }
+
+        body.append(agentSection);
+
+        if (descriptors.length) {
+            const descriptorSection = document.createElement('div');
+            descriptorSection.className = 'schematical-agent-footer__descriptors';
+
+            descriptors.forEach((descriptor) => {
                 const item = document.createElement('div');
                 item.className = 'schematical-agent-footer__item';
 
                 const heading = document.createElement('p');
                 heading.className = 'schematical-agent-footer__itemTitle';
-                heading.textContent = result.label;
+                heading.textContent = descriptor.label;
 
                 const urlLink = document.createElement('a');
                 urlLink.className = 'schematical-agent-footer__itemUrl';
-                urlLink.href = result.url;
-                urlLink.textContent = result.url;
+                urlLink.href = descriptor.url;
+                urlLink.textContent = descriptor.url;
                 urlLink.target = '_blank';
                 urlLink.rel = 'noopener noreferrer';
 
                 const preview = document.createElement('pre');
                 preview.className = 'schematical-agent-footer__preview';
-                preview.textContent = result.preview;
+                preview.textContent = descriptor.preview;
 
                 item.append(heading, urlLink, preview);
-                body.append(item);
+                descriptorSection.append(item);
             });
+
+            body.append(descriptorSection);
         }
 
-        const shouldBeOpen = this.forceOpenOnNextRender || results.length === 0 || wasOpen;
+        const shouldBeOpen = this.forceOpenOnNextRender || agents.length === 0 || wasOpen;
         footer!.classList.toggle('schematical-agent-footer--open', shouldBeOpen);
         this.forceOpenOnNextRender = false;
     }
@@ -425,6 +720,116 @@ class AgentDiscovery {
 
         scanButton.textContent = 'Scan again';
         scanButton.disabled = false;
+    }
+
+    private async syncToggleState(hostKey: string, agents: DiscoveredAgent[] | undefined | null): Promise<void> {
+        const safeAgents = Array.isArray(agents) ? agents : [];
+
+        if (!safeAgents.length) {
+            this.currentToggleState = {};
+            await this.removeAgentToggles(hostKey);
+            return;
+        }
+
+        const stored = await this.loadAgentToggles(hostKey);
+        const next: AgentToggleState = {};
+        let requiresSave = false;
+
+        safeAgents.forEach((agent) => {
+            const storedValue = stored[agent.agentId];
+            if (storedValue === undefined) {
+                requiresSave = true;
+            }
+            next[agent.agentId] = storedValue === true;
+        });
+
+        const storedKeys = Object.keys(stored);
+        if (storedKeys.some((key) => !(key in next))) {
+            requiresSave = true;
+        }
+
+        this.currentToggleState = next;
+
+        if (requiresSave) {
+            await this.saveAgentToggles(hostKey, next);
+        }
+    }
+
+    private async handleAgentToggle(agent: DiscoveredAgent, enabled: boolean): Promise<void> {
+        if (!this.currentHostKey) {
+            return;
+        }
+
+        this.currentToggleState[agent.agentId] = enabled;
+        await this.saveAgentToggles(this.currentHostKey, this.currentToggleState);
+
+        if (this.currentOrigin) {
+            void this.notifyToggleChange(this.currentHostKey, this.currentOrigin, agent, enabled, this.currentToggleState);
+        }
+    }
+
+    private async notifyToggleChange(
+        hostKey: string,
+        origin: string,
+        agent: DiscoveredAgent,
+        enabled: boolean,
+        toggles: AgentToggleState
+    ): Promise<void> {
+        try {
+            await chrome.runtime.sendMessage({
+                type: 'AGENT_TOGGLE_UPDATE',
+                payload: {
+                    host: hostKey,
+                    origin,
+                    agent,
+                    enabled,
+                    toggles
+                }
+            });
+        } catch (error) {
+            console.debug('[Schematical] toggle update failed', error);
+        }
+    }
+
+    private async loadAgentToggles(hostKey: string): Promise<AgentToggleState> {
+        try {
+            const storage = await chrome.storage.local.get(this.toggleStorageKey);
+            const store: AgentToggleStore = storage[this.toggleStorageKey] ?? {};
+            return store[hostKey] ?? {};
+        } catch (error) {
+            console.debug('[Schematical] unable to read toggle state', error);
+            return {};
+        }
+    }
+
+    private async saveAgentToggles(hostKey: string, toggles: AgentToggleState): Promise<void> {
+        try {
+            const storage = await chrome.storage.local.get(this.toggleStorageKey);
+            const store: AgentToggleStore = storage[this.toggleStorageKey] ?? {};
+
+            if (!Object.keys(toggles).length) {
+                delete store[hostKey];
+            } else {
+                store[hostKey] = toggles;
+            }
+
+            await chrome.storage.local.set({ [this.toggleStorageKey]: store });
+        } catch (error) {
+            console.debug('[Schematical] unable to persist toggle state', error);
+        }
+    }
+
+    private async removeAgentToggles(hostKey: string): Promise<void> {
+        try {
+            const storage = await chrome.storage.local.get(this.toggleStorageKey);
+            const store: AgentToggleStore = storage[this.toggleStorageKey] ?? {};
+            if (store[hostKey]) {
+                delete store[hostKey];
+                await chrome.storage.local.set({ [this.toggleStorageKey]: store });
+            }
+        } catch (error) {
+            console.debug('[Schematical] unable to clear toggle state', error);
+        }
     }
 }
 

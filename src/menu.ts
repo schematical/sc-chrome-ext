@@ -14,4 +14,16 @@ $(document).ready(async () => {
             $('#txt-block-list').val(result.replace_text);
         });
     console.log("LOADED!");
+
+    $('#btn-open-chat').on('click', (e) => {
+        e.preventDefault();
+        const url = chrome.runtime.getURL('chat.html');
+        chrome.tabs.create({ url });
+    });
+
+    $('#btn-open-settings').on('click', (e) => {
+        e.preventDefault();
+        const url = chrome.runtime.getURL('settings.html');
+        chrome.tabs.create({ url });
+    });
 });

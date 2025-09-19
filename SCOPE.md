@@ -1,32 +1,32 @@
-# Agent Toggle & LangChain Integration Scope
+# Agent Platform Restructure & Server Integration Scope
 
-## Objective
-Allow users to enable or disable agents discovered on a domain so that a forthcoming LangChain-based assistant can invoke only the approved tools. Toggle state must persist across sessions and synchronize with a background mediator that exposes enabled agents (and their A2A payloads) to LangChain.
+## Goals
+- Restructure the repository into a workspace layout with the Chrome extension under `packages/extension` and a new Express/Lambda-compatible LangChain service under `packages/server`.
+- Move all LangChain/OpenAI orchestration to the Node environment so the extension only discovers agents, captures user input, and proxies requests to the service.
+- Keep agent discovery, caching, and toggle UX intact while introducing configurable settings for the remote service.
 
-## Current Signals
-- Content script discovers `llms.txt`, UTCP, and several `/.well-known/*` descriptors, caching results for 24 hours and rendering them in a footer with manual rescan support.
-- Results currently display raw previews; no interaction beyond rescanning exists.
-- Background service worker is idle; LangChain integration is not yet wired.
+## Current State
+- Extension (now under `packages/extension`) identifies well-known descriptors, caches results, renders a footer with toggles, and provides chat/settings pages.
+- Background script stores enabled agents, but now forwards chat prompts to a remote endpoint (`/chat`) instead of calling OpenAI directly.
+- Chat/settings pages persist the OpenAI model, optional API key (forwarded to the service), and the agent server URL in `chrome.storage.local`.
+- Server scaffold (under `packages/server`) exposes `/healthz` and `/chat`, using LangChain + `@langchain/openai`; includes a serverless handler for AWS Lambda via `@codegenie/serverless-express`.
 
-## Proposed Additions
-1. **Footer Toggle UI**
-   - Add one switch per agent descriptor (not per skill) in the existing footer list.
-   - Reflect enabled state immediately, including after rescans and cache hits.
-   - Default to disabled until the user opts in.
+## Next Steps
+1. **Extension Enhancements**
+   - Harden server URL validation and error surfaces in the chat UI.
+   - Expand background telemetry/logging for server failures and agent responses.
+   - Consider batching agent metadata to reduce payload size when forwarding to the service.
 
-2. **State Management**
-   - Persist toggle decisions in `chrome.storage.local` keyed by origin + agent id.
-   - Clear cached decisions when forced rescans detect that an agent disappeared.
+2. **Server Build & Deployment**
+   - Package Express app with build artifacts (`dist/`) and document local vs. Lambda deployments.
+   - Add configuration options (environment variables) for rate limiting, logging, and API key management.
+   - Implement real A2A tool invocation logic once the service interface is finalised.
 
-3. **Background Mediation**
-   - Background service worker maintains a lightweight registry of enabled agents and their latest A2A payloads.
-   - Expose a message channel (e.g., `chrome.runtime.sendMessage`) or long-lived port for the LangChain runtime to request enabled agents.
-   - Ensure updates propagate: content script informs background after toggles or discovery changes.
+3. **Security & Settings**
+   - Evaluate storing API keys exclusively on the server for production deployments; allow the extension-side key only during local development.
+   - Add authentication (e.g., signed requests or API tokens) between the extension and server before public release.
 
-4. **LangChain Hand-off**
-   - Provide a helper that converts enabled A2A entries into LangChain tool descriptors (one tool per agent for now) and returns an initialized A2A client wrapper.
-
-## Testing & Validation
-- Unit-test toggle storage helpers and background registry logic.
-- Manual QA: enable/disable agents, refresh pages, force rescans, and confirm state persists.
-- Simulate LangChain handshake to verify only enabled agents are surfaced.
+## Validation Checklist
+- Extension build (`npm run build` from repo root) succeeds and produces the unpacked bundle in `packages/extension/dist`.
+- Server build (`npm run build --workspace sc-agent-server`) emits `dist/` with `server.js` and `handler.js`. Local dev: `npm run dev --workspace sc-agent-server`.
+- Manual QA: configure server URL in the settings page, enable agents, trigger chat prompts, observe server logs, and ensure responses reach the footer/chat UI.

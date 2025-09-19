@@ -9,6 +9,10 @@
     "storage",
     "tabs"
   ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "action": {
     "default_popup": "menu.html",
     "default_icon": "images/icon.png"
