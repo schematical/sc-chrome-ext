@@ -23,7 +23,7 @@
    - Implement real A2A tool invocation logic once the service interface is finalised.
 
 3. **Security & Settings**
-   - Evaluate storing API keys exclusively on the server for production deployments; allow the extension-side key only during local development.
+   - Keep model/provider credentials server-side; the extension now only stores the agent service URL.
    - Add authentication (e.g., signed requests or API tokens) between the extension and server before public release.
 
 ## Validation Checklist

@@ -6,6 +6,10 @@ Source lives in `src/` with entry points `main.ts`, `menu.ts`, and `background.t
 ## Build, Test, and Development Commands
 Run `npm install` once per clone. Use `npm run dev` for an incremental production build with file watching; it outputs to `dist/` so you can load an unpacked extension in Chrome. Ship builds with `npm run build`, which runs Webpack in production mode and will fail on TypeScript errors because of `noEmitOnError`. When experimenting with TypeScript diagnostics, `npx tsc --noEmit` is a quick lint-style check.
 
+- **Workspace rebuild**: `npm run build --workspaces` from the repo root builds both the extension and the server.
+- **Extension-only**: `npm run build --workspace sc-chrome-ext`.
+- **Server-only**: `npm run build --workspace sc-agent-server`.
+
 ## Coding Style & Naming Conventions
 TypeScript is compiled in strict mode, so prefer explicit return types on exported functions and avoid `any`. Follow the existing four-space indentation and single-quote strings. Use `camelCase` for variables and functions, `PascalCase` for classes, and keep Chrome message/action constants in SCREAMING_SNAKE_CASE. SCSS modules should mirror their owning TypeScript file name (e.g., `main.ts` ↔ `main.scss`).
 

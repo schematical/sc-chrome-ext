@@ -55,9 +55,6 @@ interface ChatMessageEntry {
 }
 
 interface ChatSettings {
-    provider: 'openai';
-    openaiApiKey?: string;
-    openaiModel?: string;
     serverUrl?: string;
 }
 
@@ -221,13 +218,15 @@ const langChainManager = new LangChainManager();
 const chatHistory: ChatMessageEntry[] = [];
 const CHAT_HISTORY_LIMIT = 100;
 const SETTINGS_STORAGE_KEY = 'schematicalAgentSettings';
+const REGISTRY_STORAGE_KEY = 'schematicalAgentRegistry';
+const CHAT_HISTORY_STORAGE_KEY = 'schematicalAgentChatHistory';
 let chatSettings: ChatSettings = {
-    provider: 'openai',
-    openaiModel: 'gpt-4o-mini',
     serverUrl: 'http://localhost:4000'
 };
 
 void bootstrapSettings();
+void bootstrapRegistry();
+void bootstrapChatHistory();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!isRecord(message) || typeof message.type !== 'string') {
@@ -353,6 +352,7 @@ function handleToggleUpdate(payload: unknown): void {
 function refreshLangChainState(): void {
     const enabledAgents = getEnabledAgentsFromRegistry(null);
     langChainManager.updateEnabledAgents(enabledAgents);
+    void persistRegistry();
 }
 
 function handleChatMessage(payload: unknown): Promise<ChatResponsePayload> {
@@ -428,12 +428,6 @@ async function bootstrapSettings(): Promise<void> {
         const stored = storage[SETTINGS_STORAGE_KEY] as ChatSettings | undefined;
         if (stored) {
             chatSettings = {
-                provider: 'openai',
-                openaiApiKey: typeof stored.openaiApiKey === 'string' ? stored.openaiApiKey : undefined,
-                openaiModel:
-                    typeof stored.openaiModel === 'string' && stored.openaiModel.trim()
-                        ? stored.openaiModel.trim()
-                        : 'gpt-4o-mini',
                 serverUrl:
                     typeof stored.serverUrl === 'string' && stored.serverUrl.trim()
                         ? stored.serverUrl.trim()
@@ -445,6 +439,66 @@ async function bootstrapSettings(): Promise<void> {
     }
 }
 
+async function bootstrapRegistry(): Promise<void> {
+    try {
+        const storage = await chrome.storage.local.get(REGISTRY_STORAGE_KEY);
+        const stored = storage[REGISTRY_STORAGE_KEY] as HostRegistry | undefined;
+        if (stored && typeof stored === 'object') {
+            Object.keys(registry).forEach((key) => delete registry[key]);
+            Object.entries(stored).forEach(([host, entry]) => {
+                if (entry && typeof entry === 'object') {
+                    registry[host] = {
+                        origin: entry.origin ?? '',
+                        descriptors: Array.isArray(entry.descriptors) ? entry.descriptors : [],
+                        agents: Array.isArray(entry.agents) ? entry.agents : [],
+                        toggles: normalizeToggleState(entry.toggles)
+                    };
+                }
+            });
+            refreshLangChainState();
+        }
+    } catch (error) {
+        console.debug('[Schematical] failed to bootstrap registry', error);
+    }
+}
+
+async function persistRegistry(): Promise<void> {
+    try {
+        await chrome.storage.local.set({ [REGISTRY_STORAGE_KEY]: registry });
+    } catch (error) {
+        console.debug('[Schematical] failed to persist registry', error);
+    }
+}
+
+async function bootstrapChatHistory(): Promise<void> {
+    try {
+        const storage = await chrome.storage.local.get(CHAT_HISTORY_STORAGE_KEY);
+        const stored = storage[CHAT_HISTORY_STORAGE_KEY];
+        if (Array.isArray(stored)) {
+            chatHistory.length = 0;
+            stored.forEach((entry) => {
+                const sanitized = sanitizeChatEntry(entry);
+                if (sanitized) {
+                    chatHistory.push(sanitized);
+                }
+            });
+            if (chatHistory.length > CHAT_HISTORY_LIMIT) {
+                chatHistory.splice(0, chatHistory.length - CHAT_HISTORY_LIMIT);
+            }
+        }
+    } catch (error) {
+        console.debug('[Schematical] failed to bootstrap chat history', error);
+    }
+}
+
+async function persistChatHistory(): Promise<void> {
+    try {
+        await chrome.storage.local.set({ [CHAT_HISTORY_STORAGE_KEY]: chatHistory });
+    } catch (error) {
+        console.debug('[Schematical] failed to persist chat history', error);
+    }
+}
+
 async function handleSettingsUpdate(payload: unknown): Promise<SettingsUpdatePayload> {
     if (!isRecord(payload) || !isRecord(payload.settings)) {
         throw new Error('Invalid settings payload.');
@@ -452,24 +506,11 @@ async function handleSettingsUpdate(payload: unknown): Promise<SettingsUpdatePay
 
     const incoming = payload.settings as Record<string, unknown>;
     const updated: ChatSettings = {
-        provider: 'openai',
-        openaiApiKey:
-            typeof incoming.openaiApiKey === 'string' && incoming.openaiApiKey.trim()
-                ? incoming.openaiApiKey.trim()
-                : undefined,
-        openaiModel:
-            typeof incoming.openaiModel === 'string' && incoming.openaiModel.trim()
-                ? incoming.openaiModel.trim()
-                : 'gpt-4o-mini',
         serverUrl:
             typeof incoming.serverUrl === 'string' && incoming.serverUrl.trim()
                 ? incoming.serverUrl.trim()
                 : chatSettings.serverUrl
     };
-
-    if (updated.openaiApiKey && !updated.openaiApiKey.startsWith('sk-')) {
-        throw new Error('OpenAI API keys typically start with "sk-".');
-    }
 
     if (!updated.serverUrl) {
         throw new Error('Agent server URL is required.');
@@ -490,6 +531,7 @@ async function handleSettingsUpdate(payload: unknown): Promise<SettingsUpdatePay
 
 function clearChatHistory(): void {
     chatHistory.length = 0;
+    void persistChatHistory();
 }
 
 async function callAgentServer(
@@ -518,9 +560,7 @@ async function callAgentServer(
         },
         body: JSON.stringify({
             message,
-            agents,
-            model: settings.openaiModel,
-            apiKey: settings.openaiApiKey
+            agents
         })
     });
 
@@ -660,6 +700,8 @@ function addChatMessage(role: ChatMessageRole, content: string, debug?: Record<s
         chatHistory.splice(0, chatHistory.length - CHAT_HISTORY_LIMIT);
     }
 
+    void persistChatHistory();
+
     return entry;
 }
 
@@ -671,6 +713,34 @@ function cloneChatHistory(): ChatMessageEntry[] {
         timestamp: entry.timestamp,
         debug: entry.debug ? JSON.parse(JSON.stringify(entry.debug)) : undefined
     }));
+}
+
+function sanitizeChatEntry(entry: unknown): ChatMessageEntry | null {
+    if (!isRecord(entry)) {
+        return null;
+    }
+
+    const role = entry.role;
+    if (role !== 'user' && role !== 'assistant' && role !== 'system') {
+        return null;
+    }
+
+    if (typeof entry.content !== 'string') {
+        return null;
+    }
+
+    const sanitized: ChatMessageEntry = {
+        id: typeof entry.id === 'string' ? entry.id : createMessageId(),
+        role,
+        content: entry.content,
+        timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now()
+    };
+
+    if (isRecord(entry.debug)) {
+        sanitized.debug = JSON.parse(JSON.stringify(entry.debug));
+    }
+
+    return sanitized;
 }
 
 function extractChatText(payload: unknown): string {

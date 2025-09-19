@@ -1,9 +1,6 @@
 export {};
 
 interface ChatSettings {
-    provider: 'openai';
-    openaiApiKey?: string;
-    openaiModel?: string;
     serverUrl?: string;
 }
 
@@ -22,40 +19,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
 class SettingsApp {
     private formEl: HTMLFormElement;
-    private keyInput: HTMLInputElement;
-    private modelInput: HTMLInputElement;
     private serverUrlInput: HTMLInputElement;
     private statusEl: HTMLElement;
-    private clearButton: HTMLButtonElement;
     private saveButton: HTMLButtonElement;
 
     constructor() {
         const formNode = document.getElementById('settings-form');
-        const keyNode = document.getElementById('openai-key');
-        const modelNode = document.getElementById('openai-model');
-        const statusNode = document.getElementById('settings-status');
-        const clearNode = document.getElementById('settings-clear');
-        const saveNode = document.getElementById('settings-save');
         const serverUrlNode = document.getElementById('agent-server-url');
+        const statusNode = document.getElementById('settings-status');
+        const saveNode = document.getElementById('settings-save');
 
         if (
             !(formNode instanceof HTMLFormElement) ||
-            !(keyNode instanceof HTMLInputElement) ||
-            !(modelNode instanceof HTMLInputElement) ||
+            !(serverUrlNode instanceof HTMLInputElement) ||
             !(statusNode instanceof HTMLElement) ||
-            !(clearNode instanceof HTMLButtonElement) ||
-            !(saveNode instanceof HTMLButtonElement) ||
-            !(serverUrlNode instanceof HTMLInputElement)
+            !(saveNode instanceof HTMLButtonElement)
         ) {
             throw new Error('Settings UI failed to initialise. Missing elements.');
         }
 
         this.formEl = formNode;
-        this.keyInput = keyNode;
-        this.modelInput = modelNode;
-        this.statusEl = statusNode;
         this.serverUrlInput = serverUrlNode;
-        this.clearButton = clearNode;
+        this.statusEl = statusNode;
         this.saveButton = saveNode;
     }
 
@@ -67,11 +52,6 @@ class SettingsApp {
     private bindEvents(): void {
         this.formEl.addEventListener('submit', (event) => {
             event.preventDefault();
-            void this.saveSettings();
-        });
-
-        this.clearButton.addEventListener('click', () => {
-            this.keyInput.value = '';
             void this.saveSettings();
         });
     }
@@ -86,8 +66,6 @@ class SettingsApp {
             }
 
             const { settings } = response;
-            this.keyInput.value = settings.openaiApiKey ?? '';
-            this.modelInput.value = settings.openaiModel ?? 'gpt-4o-mini';
             this.serverUrlInput.value = settings.serverUrl ?? 'http://localhost:4000';
             this.updateStatus('Settings loaded.');
         } catch (error) {
@@ -102,13 +80,10 @@ class SettingsApp {
 
         try {
             const payload: ChatSettings = {
-                provider: 'openai',
-                openaiApiKey: this.keyInput.value.trim() || undefined,
-                openaiModel: this.modelInput.value.trim() || 'gpt-4o-mini',
                 serverUrl: this.serverUrlInput.value.trim() || undefined
             };
 
-            const response = await sendMessage<SettingsPayload>('UPDATE_SETTINGS', { settings: payload });
+            const response = await sendMessage<SettingsUpdatePayload>('UPDATE_SETTINGS', { settings: payload });
             if (!response.ok) {
                 this.updateStatus(response.error ?? 'Failed to save settings.');
                 return;
@@ -128,11 +103,8 @@ class SettingsApp {
     }
 
     private setFormEnabled(enabled: boolean): void {
-        this.keyInput.disabled = !enabled;
-        this.modelInput.disabled = !enabled;
         this.serverUrlInput.disabled = !enabled;
         this.saveButton.disabled = !enabled;
-        this.clearButton.disabled = !enabled;
     }
 }
 
