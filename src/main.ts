@@ -167,6 +167,11 @@ class AgentDiscovery {
                 return null;
             }
 
+            const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+            if (contentType.includes('text/html')) {
+                return null;
+            }
+
             let preview: string;
             const data: AgentDescriptorData = {};
             if (endpoint.expectsJson) {
@@ -177,11 +182,17 @@ class AgentDiscovery {
                     data.rawText = JSON.stringify(json);
                 } catch (jsonError) {
                     const text = await response.text();
+                    if (this.looksLikeHtml(text)) {
+                        return null;
+                    }
                     preview = this.buildPreview(text);
                     data.rawText = text;
                 }
             } else {
                 const text = await response.text();
+                if (this.looksLikeHtml(text)) {
+                    return null;
+                }
                 preview = this.buildPreview(text);
                 data.rawText = text;
             }
@@ -345,6 +356,19 @@ class AgentDiscovery {
         } catch (error) {
             return '[invalid JSON payload]';
         }
+    }
+
+    private looksLikeHtml(raw: string): boolean {
+        const trimmed = raw.trim();
+        if (!trimmed) {
+            return false;
+        }
+
+        return (
+            /<\s*html/i.test(trimmed) ||
+            /<head[\s>]/i.test(trimmed) ||
+            /<body[\s>]/i.test(trimmed)
+        );
     }
 
     private injectStyles(): void {
