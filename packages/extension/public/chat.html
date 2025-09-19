@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Schematical Agent Chat Debugger</title>
+  <link rel="stylesheet" href="chat.css" />
+</head>
+<body>
+  <main class="chat-app" id="chat-app">
+    <header class="chat-app__header">
+      <h1>Schematical Agent Chat</h1>
+      <p class="chat-app__subtitle">Debug console for LangChain integrations. Messages are simulated until live A2A hooks are wired.</p>
+      <div class="chat-app__actions">
+        <button id="refresh-state" type="button">Refresh State</button>
+        <button id="clear-chat" type="button">Clear Session</button>
+        <button id="open-settings" type="button">Agent Settings</button>
+      </div>
+    </header>
+
+    <section class="chat-app__panels">
+      <section class="chat-panel chat-panel--history">
+        <h2>Conversation</h2>
+        <div id="chat-history" class="chat-history"></div>
+      </section>
+
+      <aside class="chat-panel chat-panel--sidebar">
+        <section>
+          <h2>Enabled Agents</h2>
+          <div id="agent-list" class="agent-list"></div>
+        </section>
+        <section>
+          <h2>LangChain Debug</h2>
+          <div id="agent-debug" class="debug-view"></div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="chat-app__composer">
+      <form id="chat-form" class="chat-form">
+        <label for="chat-input">Send a message</label>
+        <textarea id="chat-input" placeholder="Ask the LangChain agent anything about the current page…" rows="3"></textarea>
+        <div class="chat-form__controls">
+          <span id="chat-status" class="chat-status">Idle</span>
+          <button id="chat-submit" type="submit">Send</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="chat.js"></script>
+</body>
+</html>
