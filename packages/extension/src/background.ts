@@ -69,27 +69,10 @@ interface SettingsUpdatePayload {
     error?: string;
 }
 
-interface ToolInvocationRecord {
-    agentId: string;
-    agentName: string;
-    host: string;
-    origin: string;
-    notes: string;
-    payloadPreview: string;
-    timestamp: number;
-}
-
-interface LangChainResponse {
-    reply: string;
-    invocations: ToolInvocationRecord[];
-    toolCount: number;
-}
-
 interface ChatResponsePayload {
     ok: boolean;
     history: ChatMessageEntry[];
     reply?: ChatMessageEntry;
-    invocations?: ToolInvocationRecord[];
     debug: LangChainDebugSnapshot;
     enabledAgents: EnabledAgentSummary[];
     error?: string;
@@ -117,50 +100,12 @@ interface LangChainDebugSnapshot {
     lastUpdated: number;
 }
 
-interface LangChainTool {
-    readonly id: string;
-    invoke(input: string): Promise<ToolInvocationRecord>;
-    toDebug(): LangChainToolDebug;
-}
-
-class A2ATool implements LangChainTool {
-    public readonly id: string;
-
-    constructor(private readonly agent: EnabledAgentSummary) {
-        this.id = agent.agentId;
-    }
-
-    async invoke(input: string): Promise<ToolInvocationRecord> {
-        const notes = `Simulated A2A call for "${this.agent.name}" with query: ${input}`;
-        return {
-            agentId: this.agent.agentId,
-            agentName: this.agent.name,
-            host: this.agent.host,
-            origin: this.agent.origin,
-            notes,
-            payloadPreview: formatPayloadPreview(this.agent.payload),
-            timestamp: Date.now()
-        };
-    }
-
-    toDebug(): LangChainToolDebug {
-        return {
-            id: this.agent.agentId,
-            name: this.agent.name,
-            host: this.agent.host,
-            origin: this.agent.origin
-        };
-    }
-}
-
 class LangChainManager {
     private enabledAgents: EnabledAgentSummary[] = [];
-    private tools: LangChainTool[] = [];
     private lastUpdated = Date.now();
 
     updateEnabledAgents(agents: EnabledAgentSummary[]): void {
         this.enabledAgents = agents.slice();
-        this.tools = agents.map((agent) => new A2ATool(agent));
         this.lastUpdated = Date.now();
     }
 
@@ -172,7 +117,12 @@ class LangChainManager {
     }
 
     getDebugSnapshot(): LangChainDebugSnapshot {
-        const toolsDebug = this.tools.map((tool) => tool.toDebug());
+        const toolsDebug: LangChainToolDebug[] = this.enabledAgents.map((agent) => ({
+            id: agent.agentId,
+            name: agent.name,
+            host: agent.host,
+            origin: agent.origin
+        }));
         return {
             enabledAgentCount: this.enabledAgents.length,
             hosts: Array.from(new Set(this.enabledAgents.map((agent) => agent.host))).sort(),
@@ -182,34 +132,14 @@ class LangChainManager {
         };
     }
 
-    async handleUserMessage(message: string, settings: ChatSettings): Promise<LangChainResponse> {
-        const invocations = await Promise.all(this.tools.map((tool) => tool.invoke(message)));
-
+    async handleUserMessage(message: string, settings: ChatSettings): Promise<string> {
         try {
             const reply = await callAgentServer(message, this.enabledAgents, settings);
-            return {
-                reply,
-                invocations,
-                toolCount: invocations.length
-            };
+            return reply;
         } catch (error) {
             console.debug('[Schematical] agent server error', error);
             throw error;
         }
-    }
-
-    private composeReply(message: string, invocations: ToolInvocationRecord[]): string {
-        const header = `Processed request: "${message}"`;
-
-        if (!invocations.length) {
-            return `${header}\n\nNo tools were invoked locally. The agent service may still respond with guidance once fully integrated.`;
-        }
-
-        const summary = invocations
-            .map((invocation) => `• ${invocation.agentName} (${invocation.agentId}) via ${invocation.host}`)
-            .join('\n');
-
-        return `${header}\n\nConsulted ${invocations.length} agent tool${invocations.length > 1 ? 's' : ''}:\n${summary}\n\nResponses are simulated until live A2A integration is provided.`;
     }
 }
 
@@ -383,17 +313,13 @@ function handleChatMessage(payload: unknown): Promise<ChatResponsePayload> {
 
     return langChainManager
         .handleUserMessage(text, chatSettings)
-        .then((agentResponse) => {
-            const assistantEntry = addChatMessage('assistant', agentResponse.reply, {
-                toolCount: agentResponse.toolCount,
-                invocations: agentResponse.invocations
-            });
+        .then((replyText) => {
+            const assistantEntry = addChatMessage('assistant', replyText);
 
             return {
                 ok: true,
                 history: cloneChatHistory(),
                 reply: assistantEntry,
-                invocations: agentResponse.invocations,
                 enabledAgents: langChainManager.getEnabledAgents(),
                 debug: langChainManager.getDebugSnapshot()
             } satisfies ChatResponsePayload;

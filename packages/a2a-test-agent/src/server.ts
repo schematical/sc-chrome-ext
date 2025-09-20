@@ -36,8 +36,16 @@ const testAgentCard: AgentCard = {
       description: 'Returns a canned task result for verification.',
       tags: ['test'],
     },
+    {
+      id: 'get_random_fruit',
+      name: 'Random Fruit',
+      description: 'Responds with a random fruit for testing multi-skill routing.',
+      tags: ['test', 'fruit'],
+    },
   ],
 };
+
+const randomFruits = ['apple', 'banana', 'orange', 'mango', 'kiwi', 'grape', 'pineapple', 'pear'];
 
 class TestTaskExecutor implements AgentExecutor {
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
@@ -46,6 +54,7 @@ class TestTaskExecutor implements AgentExecutor {
     console.log('[TestAgent] Request received', {
       taskId,
       contextId,
+      metadata: (requestContext as unknown as { metadata?: Record<string, unknown> }).metadata,
     });
 
     const initialTask: Task = {
@@ -66,6 +75,14 @@ class TestTaskExecutor implements AgentExecutor {
       console.log('[TestAgent] Execution finished', { taskId, contextId });
     });
 
+    const metadata = (requestContext as unknown as { metadata?: Record<string, unknown> }).metadata ?? {};
+    const requestedSkill = typeof metadata.skillId === 'string' ? metadata.skillId : undefined;
+    const fruit = randomFruits[Math.floor(Math.random() * randomFruits.length)];
+
+    const responseText = requestedSkill === 'get_random_fruit'
+      ? `Here is a random fruit for you: ${fruit}.`
+      : 'Test agent response payload.';
+
     const responseMessage: Message = {
       kind: 'message',
       messageId: uuidv4(),
@@ -73,7 +90,7 @@ class TestTaskExecutor implements AgentExecutor {
       parts: [
         {
           kind: 'text',
-          text: 'Test agent response payload.',
+          text: responseText,
         },
       ],
       contextId,
@@ -89,7 +106,9 @@ class TestTaskExecutor implements AgentExecutor {
         parts: [
           {
             kind: 'text',
-            text: `This is the analysis for task ${taskId}.`,
+            text: requestedSkill === 'get_random_fruit'
+              ? `Random fruit served: ${fruit}.`
+              : `This is the analysis for task ${taskId}.`,
           },
         ],
       },

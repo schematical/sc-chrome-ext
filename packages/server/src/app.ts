@@ -40,7 +40,7 @@ export function createApp(): express.Express {
 
   app.post('/chat', async (req: Request<unknown, ChatResponseBody, ChatRequestBody>, res: Response<ChatResponseBody>) => {
     try {
-      const { message, agents = [], apiKey, model } = req.body ?? {};
+      const { message, agents = [] } = req.body ?? {};
 
       if (typeof message !== 'string' || !message.trim()) {
         res.status(400).json({ ok: false, error: 'A non-empty "message" is required.' });
@@ -53,12 +53,12 @@ export function createApp(): express.Express {
       const provider = resolveProvider();
       const moduleConfig = resolveModuleConfig(provider);
 
-      const effectiveApiKey = resolveApiKey(provider, apiKey);
+      const effectiveApiKey = resolveApiKey(provider);
       if (!effectiveApiKey) {
         res.status(400).json({ ok: false, error: `API key missing for provider "${provider}".` });
         return;
       }
-      const effectiveModel = resolveModelName(provider, model);
+      const effectiveModel = resolveModelName(provider);
       const normalisedAgents = normaliseAgents(agents);
       const toolset = await buildAgentToolset(normalisedAgents, requestLogger);
       const agentSummaries = buildAgentSummary(toolset.summaries);

@@ -10,6 +10,7 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "dev:extension": "npm run dev --workspace sc-chrome-ext",
-    "dev:server": "npm run dev --workspace sc-agent-server"
+    "dev:server": "npm run dev --workspace sc-agent-server",
+    "dev:testagent": "npm run dev --workspace a2a-test-agent"
   }
 }
