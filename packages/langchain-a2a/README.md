@@ -19,8 +19,7 @@ const logger = {
   error: console.error,
 };
 
-const { tool, client } = a2a2langchain(agentCard, {
-  authToken: process.env.A2A_AUTH_TOKEN,
+const { tool, client } = await a2a2langchain(agentCard, {
   logger,
 });
 
@@ -59,12 +58,14 @@ if (response.mode === 'stream') {
 
 ## Options
 
-- `fetch`, `authToken`, `headers`: forwarded to the underlying `A2AClient`.
+- `cardUrl`: when provided, the wrapper initialises the client with `A2AClient.fromCardUrl`.
+- `fetch`: custom fetch implementation for environments without global `fetch`.
 - `logger`: optional logging interface (debug/info/warn/error).
-- `defaultMetadata`: merged into each task's metadata alongside the `skillId`.
+- `defaultMetadata`: merged into each message's metadata alongside the `skillId`.
 - `historyLength`: include conversation history hints when supported.
 - `pushNotificationConfig`: forwarded untouched to the agent.
-- `createTaskId`: override the default `crypto.randomUUID` based task ID generator.
+- `configuration`: additional overrides for the A2A `MessageSendConfiguration`.
+- `createMessageId`: override the default `crypto.randomUUID`-based message ID generator.
 
 ## Error Handling
 

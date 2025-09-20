@@ -1,6 +1,6 @@
 # Schematical Agent Server
 
-Node/Express service that fronts LangChain for the Chrome extension. It exposes a `/chat` endpoint used by the extension's background script and can also be deployed as an AWS Lambda function via `@codegenie/serverless-express`.
+Node/Express service that fronts LangChain for the Chrome extension. It exposes a `/chat` endpoint used by the extension's background script and can also be deployed as an AWS Lambda function via `@codegenie/serverless-express`. Incoming agent payloads are hydrated into LangChain-compatible tools through the shared `langchain-a2a` workspace package.
 
 ## Development
 
@@ -58,6 +58,20 @@ Response:
   "ok": true,
   "reply": "string",
   "agentCount": 2,
-  "model": "gpt-4o-mini"
+  "model": "gpt-4o-mini",
+  "toolCount": 1,
+  "availableToolCount": 1,
+  "toolErrors": [],
+  "toolExecutions": [
+    {
+      "toolName": "search_catalog",
+      "agentId": "search_catalog",
+      "skillId": "search_catalog",
+      "taskId": "task_abc123",
+      "status": "completed"
+    }
+  ]
 }
+
+`toolCount` reflects how many tools were actually invoked for the request, while `availableToolCount` shows how many valid tools were registered. When an incoming payload is missing required A2A fields, the server fetches the referenced descriptor (`descriptorUrl`) to enrich the data. Agents that still cannot be resolved are skipped and recorded in `toolErrors` (each entry lists the `agentId` and a reason string). `toolExecutions` lists the tool calls that occurred, including task identifiers and completion status when available.
 ```

@@ -1,49 +1,74 @@
-import { A2AClient, type AgentCard, type AgentSkill, type SendTaskMessage, type SendTaskParams, type TaskResult, type TaskStreamEvent } from 'a2a-js';
+import { A2AClient } from '@a2a-js/sdk/client';
+import type {
+  AgentCard,
+  AgentSkill,
+  Message,
+  MessageSendConfiguration,
+  MessageSendParams,
+  Part,
+  PushNotificationConfig,
+  Task,
+  TaskArtifactUpdateEvent,
+  TaskStatusUpdateEvent,
+  SendMessageResponse,
+  SendMessageSuccessResponse,
+} from '@a2a-js/sdk';
 import { DynamicStructuredTool } from 'langchain/tools';
 import { z } from 'zod';
 
 export interface A2ALogger {
-  debug?: (message: string, context?: Record<string, unknown>) => void;
-  info?: (message: string, context?: Record<string, unknown>) => void;
-  warn?: (message: string, context?: Record<string, unknown>) => void;
-  error?: (message: string, context?: Record<string, unknown>) => void;
+  debug(message: string, context?: Record<string, unknown>): void;
+  info(message: string, context?: Record<string, unknown>): void;
+  warn(message: string, context?: Record<string, unknown>): void;
+  error(message: string, context?: Record<string, unknown>): void;
 }
 
 export interface A2A2LangChainOptions {
+  /** Optional URL to the agent card; when provided we initialise the client via A2AClient.fromCardUrl. */
+  cardUrl?: string;
+  /** Custom fetch implementation for environments without global fetch. */
   fetch?: typeof fetch;
-  authToken?: string;
-  headers?: Record<string, string>;
   logger?: A2ALogger;
-  /** Default metadata merged into every task. */
+  /** Default metadata merged into every message send. */
   defaultMetadata?: Record<string, unknown>;
-  /** Hint for agent to include prior interactions. */
+  /** Hint for the agent to include prior history when supported. */
   historyLength?: number;
   /** Push notification preferences forwarded to the agent. */
-  pushNotificationConfig?: Record<string, unknown>;
-  /** Custom ID generator for tasks. */
-  createTaskId?: () => string;
+  pushNotificationConfig?: PushNotificationConfig;
+  /** Optional override for message configuration details. */
+  configuration?: Partial<MessageSendConfiguration>;
+  /** Custom message identifier factory. */
+  createMessageId?: () => string;
 }
+
+export type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 
 export interface A2AToolResult {
   mode: 'single' | 'stream';
-  task: TaskResult;
-  events?: TaskStreamEvent[];
+  result: Message | Task;
+  events?: A2AStreamEvent[];
+  metadata?: Record<string, unknown>;
 }
 
 const messagePartSchema = z
   .object({
-    type: z.string().optional(),
-    mimeType: z.string().optional(),
+    kind: z.string().default('text'),
     text: z.string().optional(),
     data: z.unknown().optional(),
+    uri: z.string().optional(),
+    name: z.string().optional(),
+    mimeType: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 
 const structuredContentSchema = z
   .object({
-    role: z.string().optional(),
+    role: z.enum(['user', 'agent']).optional(),
     parts: z.array(messagePartSchema).nonempty().optional(),
     text: z.string().optional(),
+    contextId: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 
@@ -87,19 +112,22 @@ export class A2ALangChainTool extends DynamicStructuredTool {
       options,
       supportsStreaming: Boolean(agent.capabilities?.streaming),
       logger: options.logger,
-      skills: agent.skills,
+      skills: agent.skills ?? [],
     };
 
     super({
       name: deriveToolName(agent),
       description: deriveToolDescription(agent),
       schema: toolInputSchema,
-      func: async (input) => executeTask(context, input as ToolInput),
+      func: async (input) => {
+        const result = await executeTask(context, input as ToolInput);
+        return JSON.stringify(result);
+      },
     });
 
     this.client = client;
     this.agent = agent;
-    this.skills = agent.skills;
+    this.skills = agent.skills ?? [];
     this.options = options;
     this.supportsStreaming = context.supportsStreaming;
   }
@@ -112,23 +140,19 @@ export interface A2ALangChainWrapper {
   skills: AgentSkill[];
 }
 
-export function a2a2langchain(agentJson: AgentCard, options: A2A2LangChainOptions = {}): A2ALangChainWrapper {
-  validateAgentCard(agentJson);
-
-  const client = new A2AClient(agentJson.url, {
-    fetch: options.fetch,
-    authToken: options.authToken,
-    headers: options.headers,
-    logger: options.logger,
-  });
-
-  const tool = new A2ALangChainTool(agentJson, client, options);
+export async function a2a2langchain(
+  agentCard: AgentCard | null,
+  options: A2A2LangChainOptions = {}
+): Promise<A2ALangChainWrapper> {
+  const { client, resolvedAgent } = await initialiseClient(agentCard, options);
+  validateAgentCard(resolvedAgent);
+  const tool = new A2ALangChainTool(resolvedAgent, client, options);
 
   return {
     client,
     tool,
-    agent: agentJson,
-    skills: agentJson.skills,
+    agent: resolvedAgent,
+    skills: resolvedAgent.skills ?? [],
   };
 }
 
@@ -137,73 +161,90 @@ async function executeTask(context: ExecutionContext, input: ToolInput): Promise
   const skill = skills.find((item) => item.id === input.skillId);
   if (!skill) {
     const error = new Error(`Unknown skillId '${input.skillId}'. Known skills: ${skills.map((s) => s.id).join(', ')}`);
-    logger?.error?.('a2a.skill_not_found', { skillId: input.skillId });
+    logger?.error('a2a.skill_not_found', { skillId: input.skillId });
     throw error;
   }
 
-  const params = buildSendTaskParams({ agent, skill, options, input });
+  const sendParams = buildSendMessageParams({ agent, skill, options, input });
   const streamingRequested = Boolean(input.streaming);
-  const executeInStreamingMode =
-    streamingRequested && supportsStreaming && typeof (client as { sendTaskSubscribe?: unknown }).sendTaskSubscribe === 'function';
+  const executeInStreamingMode = streamingRequested && supportsStreaming;
 
-  logger?.debug?.('a2a.task.dispatch', {
+    logger?.debug('a2a.message.dispatch', {
     skillId: skill.id,
     streaming: executeInStreamingMode,
-    url: agent.url,
   });
 
   try {
     if (executeInStreamingMode) {
-      const sendTaskSubscribe = (client as unknown as {
-        sendTaskSubscribe?: (params: SendTaskParams) => AsyncIterable<TaskStreamEvent>;
-      }).sendTaskSubscribe;
+      const events: A2AStreamEvent[] = [];
+      let finalResult: Message | Task | null = null;
 
-      if (!sendTaskSubscribe) {
-        throw new Error('Client does not implement sendTaskSubscribe but streaming was requested.');
-      }
-
-      const events: TaskStreamEvent[] = [];
-      for await (const event of sendTaskSubscribe(params)) {
+      const iterator = client.sendMessageStream(sendParams);
+      for await (const event of iterator) {
         events.push(event);
-        logger?.debug?.('a2a.task.stream_event', {
+        logger?.debug('a2a.stream.event', {
           skillId: skill.id,
-          type: event.type,
-          status: event.task?.status,
+          kind: (event as { kind?: string }).kind,
         });
-        if (isTerminalStatus(event.task?.status)) {
-          break;
+        if (!finalResult && isResultEvent(event)) {
+          finalResult = event;
         }
       }
 
-      const finalEvent = events[events.length - 1];
-      if (!finalEvent) {
-        throw new Error('No events returned from sendTaskSubscribe.');
+      if (!finalResult) {
+        finalResult = inferResultFromEvents(events);
       }
 
-      logger?.info?.('a2a.task.completed', {
+      if (!finalResult) {
+        throw new Error('Streaming completed without a result payload.');
+      }
+
+      logger?.info('a2a.message.completed', {
         skillId: skill.id,
-        status: finalEvent.task?.status,
+        mode: 'stream',
       });
 
       return {
         mode: 'stream',
-        task: finalEvent.task,
+        result: finalResult,
         events,
+        metadata: sendParams.metadata,
       };
     }
 
-    const result = await client.sendTask(params);
-    logger?.info?.('a2a.task.completed', {
+    logger?.debug('a2a.message.request', {
       skillId: skill.id,
-      status: result.status,
+      message: JSON.stringify(sendParams.message),
+      metadata: sendParams.metadata,
+      configuration: sendParams.configuration,
+    });
+
+    const response = await client.sendMessage(sendParams);
+
+    if (isErrorResponse(response)) {
+      const errorMessage = response.error?.message ?? 'Agent returned an error response.';
+      logger?.error('a2a.message.error', {
+        skillId: skill.id,
+        error: response.error,
+      });
+      throw new Error(errorMessage);
+    }
+
+    const success = response as SendMessageSuccessResponse;
+    const result = success.result;
+
+    logger?.info('a2a.message.completed', {
+      skillId: skill.id,
+      mode: 'single',
     });
 
     return {
       mode: 'single',
-      task: result,
+      result,
+      metadata: sendParams.metadata,
     };
   } catch (error) {
-    logger?.error?.('a2a.task.error', {
+    logger?.error('a2a.message.unhandled_error', {
       skillId: skill.id,
       error: normaliseError(error),
     });
@@ -211,7 +252,7 @@ async function executeTask(context: ExecutionContext, input: ToolInput): Promise
   }
 }
 
-function buildSendTaskParams({
+function buildSendMessageParams({
   agent,
   skill,
   options,
@@ -221,18 +262,35 @@ function buildSendTaskParams({
   skill: AgentSkill;
   options: A2A2LangChainOptions;
   input: ToolInput;
-}): SendTaskParams {
-  const taskId = options.createTaskId?.() ?? generateTaskId();
-  const message = normaliseMessage(input.content, skill, agent);
+}): MessageSendParams {
+  const messageId = options.createMessageId?.() ?? generateMessageId();
+  const message = normaliseMessage(input.content, messageId, skill, agent);
 
   const metadata: Record<string, unknown> = {
     skillId: skill.id,
+    agentName: agent.name,
     ...options.defaultMetadata,
     ...input.metadata,
   };
 
-  const params: SendTaskParams = {
-    id: taskId,
+  const configuration: MessageSendConfiguration = {
+    ...options.configuration,
+  };
+
+  if (typeof options.historyLength === 'number') {
+    configuration.historyLength = options.historyLength;
+  }
+
+  if (options.pushNotificationConfig) {
+    configuration.pushNotificationConfig = options.pushNotificationConfig;
+  }
+
+  const streaming = Boolean(input.streaming);
+  if (typeof configuration.blocking === 'undefined') {
+    configuration.blocking = !streaming;
+  }
+
+  const params: MessageSendParams = {
     message,
   };
 
@@ -240,71 +298,162 @@ function buildSendTaskParams({
     params.metadata = metadata;
   }
 
-  if (typeof options.historyLength === 'number') {
-    params.historyLength = options.historyLength;
-  }
-
-  if (options.pushNotificationConfig) {
-    params.pushNotificationConfig = options.pushNotificationConfig;
+  if (Object.keys(configuration).length > 0) {
+    params.configuration = configuration;
   }
 
   return params;
 }
 
-function normaliseMessage(content: ToolInput['content'], skill: AgentSkill, agent: AgentCard): SendTaskMessage {
+function normaliseMessage(
+  content: ToolInput['content'],
+  messageId: string,
+  _skill: AgentSkill,
+  _agent: AgentCard
+): Message {
   if (typeof content === 'string') {
     return {
+      kind: 'message',
+      messageId,
       role: 'user',
-      parts: [createTextPart(content, skill, agent)],
-    };
+      parts: [createTextPart(content)],
+    } satisfies Message;
   }
 
-  const { role, parts, text } = content;
+  const { role, parts, text, contextId, metadata } = content;
   const resolvedParts = Array.isArray(parts) && parts.length > 0
-    ? parts.map((part) => ({
-        type: part.type,
-        mimeType: part.mimeType ?? guessMimeType(part, skill, agent),
-        text: part.text,
-        data: part.data,
-      }))
+    ? parts.map(normalisePart)
     : text
-    ? [createTextPart(text, skill, agent)]
+    ? [createTextPart(text)]
     : [];
 
-  if (resolvedParts.length === 0) {
+  if (!resolvedParts.length) {
     throw new Error('Structured content must include either parts or text.');
   }
 
-  return {
-    role: role ?? 'user',
+  const message: Message = {
+    kind: 'message',
+    messageId,
+    role: role === 'agent' ? 'agent' : 'user',
     parts: resolvedParts,
   };
+
+  if (contextId) {
+    message.contextId = contextId;
+  }
+  if (metadata && Object.keys(metadata).length > 0) {
+    message.metadata = metadata;
+  }
+
+  return message;
 }
 
-function createTextPart(text: string, skill: AgentSkill, agent: AgentCard) {
-  const mimeType = chooseMimeType(skill.inputModes, agent.defaultInputModes);
+function normalisePart(part: z.infer<typeof messagePartSchema>): Part {
+  if (part.kind === 'text' || !part.kind) {
+    return {
+      kind: 'text',
+      text: part.text ?? '',
+      metadata: part.metadata,
+    };
+  }
+
+  if (part.kind === 'file') {
+    const file = buildFileDescriptor(part);
+    return {
+      kind: 'file',
+      file,
+      metadata: part.metadata,
+    } as Part;
+  }
+
+  if (part.kind === 'data') {
+    const data = buildDataPayload(part.data);
+    return {
+      kind: 'data',
+      data,
+      metadata: part.metadata,
+    } as Part;
+  }
+
   return {
-    type: 'text',
+    kind: part.kind,
+    text: part.text ?? '',
+    metadata: part.metadata,
+  } as Part;
+}
+
+function buildFileDescriptor(
+  part: z.infer<typeof messagePartSchema>
+): { uri: string; mimeType?: string; name?: string } | { bytes: string; mimeType?: string; name?: string } {
+  if (typeof part.data === 'string') {
+    return {
+      bytes: part.data,
+      mimeType: part.mimeType,
+      name: part.name,
+    };
+  }
+
+  if (typeof part.uri === 'string' && part.uri.trim()) {
+    return {
+      uri: part.uri,
+      mimeType: part.mimeType,
+      name: part.name,
+    };
+  }
+
+  throw new Error('File parts must include either a base64 "data" payload or a "uri".');
+}
+
+function buildDataPayload(source: unknown): Record<string, unknown> {
+  if (!source) {
+    return {};
+  }
+  if (typeof source === 'object') {
+    return source as Record<string, unknown>;
+  }
+  if (typeof source === 'string') {
+    try {
+      const parsed = JSON.parse(source);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch (error) {
+      // fall through to default
+    }
+  }
+  throw new Error('Data parts require an object payload.');
+}
+
+function createTextPart(text: string): Part {
+  return {
+    kind: 'text',
     text,
-    mimeType,
   };
 }
 
-function guessMimeType(part: { mimeType?: string }, skill: AgentSkill, agent: AgentCard): string | undefined {
-  return part.mimeType ?? chooseMimeType(skill.inputModes, agent.defaultInputModes);
+function isErrorResponse(response: SendMessageResponse): response is Extract<SendMessageResponse, { error: unknown }> {
+  return 'error' in response && response.error !== undefined;
 }
 
-function chooseMimeType(skillModes?: string[], defaultModes?: string[]): string | undefined {
-  const candidates = skillModes && skillModes.length > 0 ? skillModes : defaultModes;
-  return candidates && candidates.length > 0 ? candidates[0] : undefined;
+function isResultEvent(event: A2AStreamEvent): event is Message | Task {
+  return (event as Message).kind === 'message' || (event as Task).kind === 'task';
 }
 
-function generateTaskId(): string {
-  const globalCrypto = (globalThis as typeof globalThis & { crypto?: { randomUUID?: () => string } }).crypto;
-  if (globalCrypto?.randomUUID) {
-    return globalCrypto.randomUUID();
+function inferResultFromEvents(events: A2AStreamEvent[]): Message | Task | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (isResultEvent(event)) {
+      return event;
+    }
   }
-  return `task_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  return null;
+}
+
+function generateMessageId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `msg_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
 function deriveToolName(agent: AgentCard): string {
@@ -312,8 +461,32 @@ function deriveToolName(agent: AgentCard): string {
 }
 
 function deriveToolDescription(agent: AgentCard): string {
-  const skills = agent.skills?.map((skill) => `${skill.id}: ${skill.description}`).join('; ');
+  const skills = agent.skills?.map((skill) => `${skill.id}: ${skill.description ?? ''}`.trim()).join('; ');
   return [agent.description, skills ? `Skills => ${skills}` : undefined].filter(Boolean).join(' ');
+}
+
+async function initialiseClient(
+  agentCard: AgentCard | null,
+  options: A2A2LangChainOptions
+): Promise<{ client: A2AClient; resolvedAgent: AgentCard }> {
+  const fetchImpl = options.fetch ?? (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined);
+
+  if (options.cardUrl) {
+    const client = await A2AClient.fromCardUrl(options.cardUrl, {
+      fetchImpl,
+    });
+    const resolvedAgent = agentCard ?? (await client.getAgentCard());
+    return { client, resolvedAgent };
+  }
+
+  if (agentCard) {
+    const client = new A2AClient(agentCard, {
+      fetchImpl,
+    });
+    return { client, resolvedAgent: agentCard };
+  }
+
+  throw new Error('Agent card or cardUrl must be provided to initialise the A2A client.');
 }
 
 function validateAgentCard(agent: AgentCard): void {
@@ -326,13 +499,6 @@ function validateAgentCard(agent: AgentCard): void {
   if (!agent.skills || agent.skills.length === 0) {
     throw new Error('Agent card must declare at least one skill.');
   }
-}
-
-function isTerminalStatus(status?: string | null): boolean {
-  if (!status) {
-    return false;
-  }
-  return ['completed', 'failed', 'canceled'].includes(status);
 }
 
 function normaliseError(error: unknown): Record<string, unknown> {

@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/extension",
     "packages/server",
-    "packages/langchain-a2a"
+    "packages/langchain-a2a",
+    "packages/a2a-test-agent"
   ],
   "scripts": {
     "build": "npm run build --workspaces",

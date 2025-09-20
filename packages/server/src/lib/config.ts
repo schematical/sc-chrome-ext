@@ -117,6 +117,12 @@ export function buildAgentSummary(agents: ServerAgentSummary[]): string {
       if (agent.description) {
         parts.push(`summary: ${agent.description}`);
       }
+      if (agent.skills?.length) {
+        const skillSummary = agent.skills
+          .map((skill) => (skill.name ? `${skill.name} [${skill.id}]` : skill.id))
+          .join(', ');
+        parts.push(`skills: ${skillSummary}`);
+      }
       return `• ${parts.join(' | ')}`;
     })
     .join('\n');
