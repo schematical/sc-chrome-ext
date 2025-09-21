@@ -12,12 +12,14 @@
   },
   "dependencies": {
     "@codegenie/serverless-express": "^4.11.0",
+    "@langchain/core": "^0.3.77",
+    "@langchain/langgraph": "^0.4.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "langchain": "^0.2.10",
-    "node-fetch": "^3.3.2",
-    "langchain-a2a": "file:../langchain-a2a"
+    "langchain-a2a": "file:../langchain-a2a",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

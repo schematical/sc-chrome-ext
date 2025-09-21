@@ -73,7 +73,7 @@ interface ChatResponsePayload {
     ok: boolean;
     history: ChatMessageEntry[];
     reply?: ChatMessageEntry;
-    debug: LangChainDebugSnapshot;
+    debug: AgentDebugSnapshot;
     enabledAgents: EnabledAgentSummary[];
     error?: string;
 }
@@ -82,25 +82,25 @@ interface ChatStatePayload {
     ok: boolean;
     history: ChatMessageEntry[];
     enabledAgents: EnabledAgentSummary[];
-    debug: LangChainDebugSnapshot;
+    debug: AgentDebugSnapshot;
 }
 
-interface LangChainToolDebug {
+interface AgentToolDebug {
     id: string;
     name: string;
     host: string;
     origin: string;
 }
 
-interface LangChainDebugSnapshot {
+interface AgentDebugSnapshot {
     enabledAgentCount: number;
     hosts: string[];
     toolIds: string[];
-    tools: LangChainToolDebug[];
+    tools: AgentToolDebug[];
     lastUpdated: number;
 }
 
-class LangChainManager {
+class AgentManager {
     private enabledAgents: EnabledAgentSummary[] = [];
     private lastUpdated = Date.now();
 
@@ -116,9 +116,9 @@ class LangChainManager {
         return this.enabledAgents.slice();
     }
 
-    getDebugSnapshot(): LangChainDebugSnapshot {
-        const toolsDebug: LangChainToolDebug[] = this.enabledAgents.map((agent) => ({
-            id: agent.agentId,
+    getDebugSnapshot(): AgentDebugSnapshot {
+        const toolsDebug: AgentToolDebug[] = this.enabledAgents.map((agent) => ({
+            id: agent.descriptorUrl || agent.agentId,
             name: agent.name,
             host: agent.host,
             origin: agent.origin
@@ -144,7 +144,7 @@ class LangChainManager {
 }
 
 const registry: HostRegistry = {};
-const langChainManager = new LangChainManager();
+const agentManager = new AgentManager();
 const chatHistory: ChatMessageEntry[] = [];
 const CHAT_HISTORY_LIMIT = 100;
 const SETTINGS_STORAGE_KEY = 'schematicalAgentSettings';
@@ -174,7 +174,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             break;
         case 'GET_ENABLED_AGENTS': {
             const host = isRecord(payload) && typeof payload.host === 'string' ? payload.host : undefined;
-            sendResponse?.({ ok: true, agents: langChainManager.getEnabledAgents(host) });
+            sendResponse?.({ ok: true, agents: agentManager.getEnabledAgents(host) });
             break;
         }
         case 'GET_CHAT_STATE':
@@ -185,15 +185,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             sendResponse?.(getChatStatePayload());
             break;
         case 'CHAT_MESSAGE':
-            handleChatMessage(payload)
+                handleChatMessage(payload)
                 .then((response) => sendResponse?.(response))
                 .catch((error) => {
                     const messageText = error instanceof Error ? error.message : 'Unknown agent error';
                     sendResponse?.({
                         ok: false,
                         history: cloneChatHistory(),
-                        debug: langChainManager.getDebugSnapshot(),
-                        enabledAgents: langChainManager.getEnabledAgents(),
+                        debug: agentManager.getDebugSnapshot(),
+                        enabledAgents: agentManager.getEnabledAgents(),
                         error: messageText
                     } satisfies ChatResponsePayload);
                 });
@@ -238,7 +238,7 @@ function handleDiscoveryUpdate(payload: unknown): void {
         toggles
     };
 
-    refreshLangChainState();
+    refreshAgentState();
 }
 
 function handleToggleUpdate(payload: unknown): void {
@@ -261,7 +261,7 @@ function handleToggleUpdate(payload: unknown): void {
             agents: agent ? [agent] : [],
             toggles: normalizeToggleState(payload.toggles)
         };
-        refreshLangChainState();
+        refreshAgentState();
         return;
     }
 
@@ -276,12 +276,12 @@ function handleToggleUpdate(payload: unknown): void {
     }
 
     entry.toggles = normalizeToggleState(payload.toggles, entry.toggles);
-    refreshLangChainState();
+    refreshAgentState();
 }
 
-function refreshLangChainState(): void {
+function refreshAgentState(): void {
     const enabledAgents = getEnabledAgentsFromRegistry(null);
-    langChainManager.updateEnabledAgents(enabledAgents);
+    agentManager.updateEnabledAgents(enabledAgents);
     void persistRegistry();
 }
 
@@ -291,8 +291,8 @@ function handleChatMessage(payload: unknown): Promise<ChatResponsePayload> {
         return Promise.resolve({
             ok: false,
             history: cloneChatHistory(),
-            enabledAgents: langChainManager.getEnabledAgents(),
-            debug: langChainManager.getDebugSnapshot(),
+            enabledAgents: agentManager.getEnabledAgents(),
+            debug: agentManager.getDebugSnapshot(),
             error: 'Message text is required.'
         });
     }
@@ -303,15 +303,15 @@ function handleChatMessage(payload: unknown): Promise<ChatResponsePayload> {
             ok: false,
             history: cloneChatHistory(),
             reply: systemEntry,
-            enabledAgents: langChainManager.getEnabledAgents(),
-            debug: langChainManager.getDebugSnapshot(),
+            enabledAgents: agentManager.getEnabledAgents(),
+            debug: agentManager.getDebugSnapshot(),
             error: 'Missing agent server URL.'
         });
     }
 
     addChatMessage('user', text);
 
-    return langChainManager
+    return agentManager
         .handleUserMessage(text, chatSettings)
         .then((replyText) => {
             const assistantEntry = addChatMessage('assistant', replyText);
@@ -320,8 +320,8 @@ function handleChatMessage(payload: unknown): Promise<ChatResponsePayload> {
                 ok: true,
                 history: cloneChatHistory(),
                 reply: assistantEntry,
-                enabledAgents: langChainManager.getEnabledAgents(),
-                debug: langChainManager.getDebugSnapshot()
+                enabledAgents: agentManager.getEnabledAgents(),
+                debug: agentManager.getDebugSnapshot()
             } satisfies ChatResponsePayload;
         })
         .catch((error) => {
@@ -332,8 +332,8 @@ function handleChatMessage(payload: unknown): Promise<ChatResponsePayload> {
                 ok: false,
                 history: cloneChatHistory(),
                 reply: systemEntry,
-                enabledAgents: langChainManager.getEnabledAgents(),
-                debug: langChainManager.getDebugSnapshot(),
+                enabledAgents: agentManager.getEnabledAgents(),
+                debug: agentManager.getDebugSnapshot(),
                 error: messageText
             } satisfies ChatResponsePayload;
         });
@@ -343,8 +343,8 @@ function getChatStatePayload(): ChatStatePayload {
     return {
         ok: true,
         history: cloneChatHistory(),
-        enabledAgents: langChainManager.getEnabledAgents(),
-        debug: langChainManager.getDebugSnapshot()
+        enabledAgents: agentManager.getEnabledAgents(),
+        debug: agentManager.getDebugSnapshot()
     };
 }
 
@@ -381,7 +381,7 @@ async function bootstrapRegistry(): Promise<void> {
                     };
                 }
             });
-            refreshLangChainState();
+        refreshAgentState();
         }
     } catch (error) {
         console.debug('[Schematical] failed to bootstrap registry', error);
@@ -479,6 +479,15 @@ async function callAgentServer(
         throw new Error('Invalid agent server URL.');
     }
 
+    const agentCardUrls = Array.from(
+        new Set(
+            agents
+                .map((agent) => agent.descriptorUrl)
+                .filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+                .map((url) => url.trim())
+        )
+    );
+
     const response = await fetch(endpoint.toString(), {
         method: 'POST',
         headers: {
@@ -486,7 +495,7 @@ async function callAgentServer(
         },
         body: JSON.stringify({
             message,
-            agents
+            agentCardUrls
         })
     });
 
@@ -514,7 +523,10 @@ function getEnabledAgentsFromRegistry(filter: unknown): EnabledAgentSummary[] {
             return;
         }
 
-        const hostEnabled = entry.agents.filter((agent) => entry.toggles[agent.agentId]);
+        const hostEnabled = entry.agents.filter((agent) => {
+            const toggleKey = agent.descriptorUrl || agent.agentId;
+            return entry.toggles[toggleKey];
+        });
         hostEnabled.forEach((agent) => {
             enabledAgents.push({
                 host,

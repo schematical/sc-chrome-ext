@@ -1,25 +1,9 @@
-export interface ServerSkillSummary {
-  id: string;
-  name?: string;
-  description?: string;
-  inputModes?: string[];
-  outputModes?: string[];
-}
 
-export interface ServerAgentSummary {
-  agentId: string;
-  name: string;
-  description?: string;
-  host?: string;
-  origin?: string;
-  descriptorUrl?: string;
-  sourceId?: string;
-  skills?: ServerSkillSummary[];
-}
 
 export interface AgentToolIssue {
-  agentId: string;
+  cardUrl: string;
   reason: string;
+  agentId?: string;
 }
 
 export interface AgentToolExecution {
@@ -33,9 +17,7 @@ export interface AgentToolExecution {
 
 export interface ChatRequestBody {
   message: string;
-  agents?: unknown;
-  apiKey?: string;
-  model?: string;
+  agentCardUrls?: string[];
 }
 
 export interface ChatResponseBody {
@@ -46,7 +28,7 @@ export interface ChatResponseBody {
   provider?: string;
   toolCount?: number;
   availableToolCount?: number;
-  toolErrors?: AgentToolIssue[];
   toolExecutions?: AgentToolExecution[];
+  toolErrors?: AgentToolIssue[];
   error?: string;
 }

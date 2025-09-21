@@ -19,17 +19,7 @@ interface EnabledAgentSummary {
     payload: unknown;
 }
 
-interface ToolInvocationRecord {
-    agentId: string;
-    agentName: string;
-    host: string;
-    origin: string;
-    notes: string;
-    payloadPreview: string;
-    timestamp: number;
-}
-
-interface LangChainDebugSnapshot {
+interface AgentDebugSnapshot {
     enabledAgentCount: number;
     hosts: string[];
     toolIds: string[];
@@ -41,8 +31,7 @@ interface ChatResponsePayload {
     ok: boolean;
     history: ChatMessageEntry[];
     reply?: ChatMessageEntry;
-    invocations?: ToolInvocationRecord[];
-    debug: LangChainDebugSnapshot;
+    debug: AgentDebugSnapshot;
     enabledAgents: EnabledAgentSummary[];
     error?: string;
 }
@@ -51,7 +40,7 @@ interface ChatStatePayload {
     ok: boolean;
     history: ChatMessageEntry[];
     enabledAgents: EnabledAgentSummary[];
-    debug: LangChainDebugSnapshot;
+    debug: AgentDebugSnapshot;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -275,7 +264,7 @@ class ChatApp {
         });
     }
 
-    private renderDebug(debug: LangChainDebugSnapshot): void {
+    private renderDebug(debug: AgentDebugSnapshot): void {
         this.debugEl.textContent = formatJSON(debug);
     }
 

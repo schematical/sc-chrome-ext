@@ -10,7 +10,7 @@
   <main class="chat-app" id="chat-app">
     <header class="chat-app__header">
       <h1>Schematical Agent Chat</h1>
-      <p class="chat-app__subtitle">Debug console for LangChain integrations. Messages are simulated until live A2A hooks are wired.</p>
+      <p class="chat-app__subtitle">Debug console for Schematical agent interactions. Messages are proxied through the local agent service.</p>
       <div class="chat-app__actions">
         <button id="refresh-state" type="button">Refresh State</button>
         <button id="clear-chat" type="button">Clear Session</button>
@@ -30,7 +30,7 @@
           <div id="agent-list" class="agent-list"></div>
         </section>
         <section>
-          <h2>LangChain Debug</h2>
+          <h2>Agent Debug</h2>
           <div id="agent-debug" class="debug-view"></div>
         </section>
       </aside>
@@ -39,7 +39,7 @@
     <section class="chat-app__composer">
       <form id="chat-form" class="chat-form">
         <label for="chat-input">Send a message</label>
-        <textarea id="chat-input" placeholder="Ask the LangChain agent anything about the current page…" rows="3"></textarea>
+        <textarea id="chat-input" placeholder="Ask the Schematical agent anything about the current page…" rows="3"></textarea>
         <div class="chat-form__controls">
           <span id="chat-status" class="chat-status">Idle</span>
           <button id="chat-submit" type="submit">Send</button>

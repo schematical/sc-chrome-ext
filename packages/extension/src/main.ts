@@ -227,19 +227,20 @@ class AgentDiscovery {
                 ? (container.agents as Array<unknown>)
                 : undefined;
             if (agentCollection) {
-                agentCollection.forEach((entry, index) => {
+               agentCollection.forEach((entry, index) => {
                     if (!entry || typeof entry !== 'object') {
                         return;
                     }
 
                     const agentRecord = entry as Record<string, unknown>;
                     const agentId = this.normaliseAgentId(agentRecord['id'], `${sourceId}-${index}`);
+                    const descriptorUrl = typeof agentRecord['url'] === 'string' ? (agentRecord['url'] as string) : descriptor.url;
                     agents.push({
                         agentId,
                         name: this.resolveAgentName(agentRecord, agentId),
                         description: this.resolveAgentDescription(agentRecord),
                         sourceId,
-                        descriptorUrl: descriptor.url,
+                        descriptorUrl,
                         payload: agentRecord
                     });
                 });
@@ -272,12 +273,14 @@ class AgentDiscovery {
             const singleAgentCandidate = payload as Record<string, unknown>;
             if (singleAgentCandidate && (typeof singleAgentCandidate.id === 'string' || typeof singleAgentCandidate.name === 'string')) {
                 const agentId = this.normaliseAgentId(singleAgentCandidate['id'], `${sourceId}-primary`);
+                const descriptorUrl = typeof singleAgentCandidate.url === 'string' ? (singleAgentCandidate.url as string) : descriptor.url;
+
                 agents.push({
                     agentId,
                     name: this.resolveAgentName(singleAgentCandidate, agentId),
                     description: this.resolveAgentDescription(singleAgentCandidate),
                     sourceId,
-                    descriptorUrl: descriptor.url,
+                    descriptorUrl,
                     payload: singleAgentCandidate
                 });
             }
@@ -637,7 +640,8 @@ class AgentDiscovery {
 
                 const toggleInput = document.createElement('input');
                 toggleInput.type = 'checkbox';
-                const enabled = this.currentToggleState[agent.agentId] === true;
+                const toggleKey = this.getToggleKey(agent);
+                const enabled = this.currentToggleState[toggleKey] === true;
                 toggleInput.checked = enabled;
 
                 const toggleLabel = document.createElement('span');
@@ -760,11 +764,12 @@ class AgentDiscovery {
         let requiresSave = false;
 
         safeAgents.forEach((agent) => {
-            const storedValue = stored[agent.agentId];
+            const key = this.getToggleKey(agent);
+            const storedValue = stored[key];
             if (storedValue === undefined) {
                 requiresSave = true;
             }
-            next[agent.agentId] = storedValue === true;
+            next[key] = storedValue === true;
         });
 
         const storedKeys = Object.keys(stored);
@@ -784,12 +789,17 @@ class AgentDiscovery {
             return;
         }
 
-        this.currentToggleState[agent.agentId] = enabled;
+        const key = this.getToggleKey(agent);
+        this.currentToggleState[key] = enabled;
         await this.saveAgentToggles(this.currentHostKey, this.currentToggleState);
 
         if (this.currentOrigin) {
             void this.notifyToggleChange(this.currentHostKey, this.currentOrigin, agent, enabled, this.currentToggleState);
         }
+    }
+
+    private getToggleKey(agent: DiscoveredAgent): string {
+        return agent.descriptorUrl || agent.agentId;
     }
 
     private async notifyToggleChange(
