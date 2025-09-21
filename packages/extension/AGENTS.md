@@ -13,14 +13,19 @@ Run `npm install` once per clone. Use `npm run dev` for an incremental productio
 ## Coding Style & Naming Conventions
 TypeScript is compiled in strict mode, so prefer explicit return types on exported functions and avoid `any`. Follow the existing four-space indentation and single-quote strings. Use `camelCase` for variables and functions, `PascalCase` for classes, and keep Chrome message/action constants in SCREAMING_SNAKE_CASE. SCSS modules should mirror their owning TypeScript file name (e.g., `main.ts` ↔ `main.scss`).
 
+## Current Integration Status
+- The extension now presents a single enable/disable toggle per discovered agent card. Enabled card URLs are forwarded to the agent server; the server is responsible for inspecting the card and wiring any skills/tools.
+- `callAgentServer` posts `{ message, agentCardUrls }`, so the backend receives just the URLs it needs to spin up tools.
+- The server binds whichever A2A-backed tools it can create and runs the LangGraph agent loop. Requests and responses to OpenAI are logged for debugging.
+- The `packages/a2a-test-agent` workspace stands up a simple test agent on `http://localhost:8002/` with `test_task` and `get_random_fruit` skills for local validation.
+- Known gap: `a2a2langchain` still returns raw tool instances; server-side code needs to adapt so LangChain can actually invoke those tools.
+
+
 ## Testing Guidelines
 No automated tests exist yet; when adding one, colocate it in a future `tests/` folder using Jest (already hinted by dependencies). Until then, document manual verification steps in pull requests, especially around keyword masking and agent discovery logic. Aim to cover new discovery branches (e.g., LLMS.txt parsing) with unit tests once the framework lands.
 
 ## Commit & Pull Request Guidelines
 Current history shows only "Initial Commit" messages, so establish a clean imperative style such as `feat: add LLMS discovery to background worker`. Reference GitHub issues when available and attach screenshots or HAR snippets if UI or network behavior changes. Pull requests should summarize the user journey, list manual test URLs, and call out any permissions or manifest edits.
 
-## Agent Discovery Focus
-The content script probes `llms.txt`, `/.well-known/agent.json`, `/.well-known/agent-card.json`, `/.well-known/a2a-agents`, and `/utcp`, caches per-domain results for 24 hours, and surfaces findings via an on-page footer that also exposes a manual “Scan again” action. Keep request definitions centralized (currently in `src/main.ts`), add graceful fallbacks for missing files, and reuse cached responses in `chrome.storage.local` to avoid needless network traffic. A lightweight agent chat debugger (`chat.html`) and credential settings view (`settings.html`) now ship with the bundle; they communicate through `src/background.ts`, so extend that service when integrating live A2A tool calls.
-
-## Error Handling:
-Never hide errors, throw them, or show them. Make it as easy to debug as possible.
+## Error Handling
+Never hide errors—surface them so debugging stays easy. All chrome runtime interactions log failures to `console.debug`, and the agent server returns structured error payloads when upstream calls fail.
