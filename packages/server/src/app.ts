@@ -39,12 +39,12 @@ export function createApp(): express.Express {
 
 
         const model = await createChatModel();
-        const tools = [];
+        let tools: any[] = [];
         for (const agentUrl of agentCardUrls) {
-            const tool = await a2a2langchain({
+            const agentTools = await a2a2langchain({
                 cardUrl: agentUrl,
             });
-            tools.push(tool)
+            tools = tools.concat(agentTools)
         }
         model.bindTools(tools);
         const toolNode = new ToolNode(tools);
