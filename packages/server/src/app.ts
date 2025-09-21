@@ -38,19 +38,48 @@ export function createApp(): express.Express {
         const {message, agentCardUrls = []} = req.body ?? {};
 
 
-        const model = await createChatModel();
+        let model = await createChatModel();
+        const openaiClient = (model as any)?.client;
+        const completions = openaiClient?.chat?.completions;
+        if (completions && typeof completions.create === 'function') {
+            const originalCreate = completions.create.bind(completions);
+            completions.create = async (...args: unknown[]) => {
+                const [request] = args as [{ [key: string]: unknown }?];
+                console.debug('[AgentServer] openai.completions.create request', request);
+                const result = await originalCreate(...args);
+                console.debug('[AgentServer] openai.completions.create response id', (result as any)?.id ?? null);
+                return result;
+            };
+        }
         let tools: any[] = [];
         for (const agentUrl of agentCardUrls) {
-            const agentTools = await a2a2langchain({
+            const agentTools: any = await a2a2langchain({
                 cardUrl: agentUrl,
             });
-            tools = tools.concat(agentTools)
+            console.debug('[AgentServer] tool wrapper', {
+                cardUrl: agentUrl,
+                wrapperType: Array.isArray(agentTools) ? 'array' : typeof agentTools,
+                toolTypes: Array.isArray(agentTools)
+                    ? agentTools.map((t: any) => t?.constructor?.name ?? typeof t)
+                    : agentTools?.tool?.constructor?.name,
+            });
+            if (Array.isArray(agentTools)) {
+                tools = tools.concat(agentTools);
+            } else if (agentTools?.tool) {
+                tools.push(agentTools.tool);
+            }
         }
-        model.bindTools(tools);
-        const toolNode = new ToolNode(tools);
+        const boundTools = tools.filter(Boolean);
+        console.debug('[AgentServer] binding tools', boundTools.map((t: any) => t?.constructor?.name ?? typeof t));
+
+        model = model.bindTools(boundTools);
+
+        const toolNode = new ToolNode(boundTools);
         const workflow = new StateGraph(MessagesAnnotation)
             .addNode("agent", async function callModel(state: typeof MessagesAnnotation.State) {
+                console.debug('[AgentServer] model.invoke input', state.messages);
                 const response = await model.invoke(state.messages);
+                console.debug('[AgentServer] model.invoke output', response);
 
                 // We return a list, because this will get added to the existing list
                 return {messages: [response]};

@@ -78,7 +78,7 @@ export async function a2a2langchain(
           return await client.sendMessage(message);
         },
         {
-          name: skill.name,
+          name: skill.id,
           description: skill.description,
           schema: z.object({
             a: z.number(),

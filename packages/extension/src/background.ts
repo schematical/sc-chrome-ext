@@ -487,6 +487,7 @@ async function callAgentServer(
                 .map((url) => url.trim())
         )
     );
+    console.debug('[Schematical] sending agent cards', agentCardUrls);
 
     const response = await fetch(endpoint.toString(), {
         method: 'POST',
