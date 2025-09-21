@@ -20,13 +20,15 @@ import { z } from 'zod';
 
 
 export async function a2a2langchain(
-  cardUrl: string
+    options: {
+      cardUrl: string
+    }
 ): Promise<any> {
 
-  if (!cardUrl) {
+  if (!options.cardUrl) {
     throw new Error('Agent card or cardUrl must be provided to initialise the A2A client.');
   }
-  const client = await A2AClient.fromCardUrl(cardUrl, {});
+  const client = await A2AClient.fromCardUrl(options.cardUrl, {});
   const resolvedAgent =  (await client.getAgentCard());
   const tools = [];
   resolvedAgent.skills.forEach((skill: AgentSkill) => {
