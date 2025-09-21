@@ -23,16 +23,16 @@ export async function a2a2langchain(
     options: {
       cardUrl: string
     }
-): Promise<any> {
+): Promise<DynamicStructuredTool[]> {
 
   if (!options.cardUrl) {
     throw new Error('Agent card or cardUrl must be provided to initialise the A2A client.');
   }
   const client = await A2AClient.fromCardUrl(options.cardUrl, {});
   const resolvedAgent =  (await client.getAgentCard());
-  const tools = [];
+  const tools: DynamicStructuredTool[] = [];
   resolvedAgent.skills.forEach((skill: AgentSkill) => {
-    const objTool =  tool(
+    const objTool: any =  tool(
         async (): Promise<any> => {
           console.log('a2a2langchain: sending message to agent', arguments);
           const message: MessageSendParams = {
@@ -78,8 +78,8 @@ export async function a2a2langchain(
           return await client.sendMessage(message);
         },
         {
-          name: "multiply",
-          description: "Multiply two numbers",
+          name: skill.name,
+          description: skill.description,
           schema: z.object({
             a: z.number(),
             b: z.number(),
@@ -90,10 +90,5 @@ export async function a2a2langchain(
   })
 
 
-  return {
-    client,
-    tool,
-    agent: resolvedAgent,
-    skills: resolvedAgent.skills ?? [],
-  };
+  return tools;
 }
